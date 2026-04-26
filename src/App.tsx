@@ -189,57 +189,137 @@ export default function App() {
   // Seeding
   const seedBase = async () => {
     if (!user || isSeeding) return;
-    if (!window.confirm("Deseja importar a base de dados padrão da Paróquia (Acólitos, Coroinhas e Missas de Abril)?")) return;
+    if (!window.confirm("Deseja importar a base de dados REAL da Paróquia (Abril 2026)? Isso registrará todos os servidores e a escala completa do mês.")) return;
 
     setIsSeeding(true);
     try {
-      const acolitos = [
-        "Ana Gabrielly Riquelme Fernandes", "Andrey Henrique Gotttems Rossatte", "Daniel Queiroz De Souza",
-        "Eric Padilha De Matos", "Ezequiel Barbosa Velasco", "Gabrielly Matos De Souza", "Júlia Machado Stival",
-        "Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara", "Leonardo Gabriel Alonso Moreira",
-        "Lucas Andreetta Ortega", "Luiz Otavio Pereira", "Luiza Emanuelle De Siqueira Freitas",
-        "Pedro Lucas Souza Bael", "Sarah Souza De Oliveira", "Mario Antonio Matiazi"
+      const acolitosNames = [
+        "Daniel Queiroz De Souza", "Andrey Henrique Gotttems Rossatte", "Pedro Lucas Souza Bael",
+        "Ezequiel Barbosa Velasco", "Mario Antonio Matiazi", "Júlia Machado Stival",
+        "Leonardo Gabriel Alonso Moreira", "Lucas Andreetta Ortega", "Luiza Emanuelle De Siqueira Freitas",
+        "Leonardo Alcântara", "Lara Beatriz Neves Barbosa (IR)", "Luiz Otavio Pereira",
+        "Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes", "Gabrielly Matos De Souza",
+        "Eric Padilha De Matos"
       ];
 
-      const coroinhas = [
-        "Alice Santolin Da Silva", "Ana Helena Menezes Ozorio", "Antonio Carlos de Souza Alba (IR)",
-        "Ana Sofia Carriel Costa (IR)", "Antonella Oruê De Lima", "Arthur Henrique Mareco Grubert",
-        "Barbara Frota Da Silva", "Bárbara Kaori Muta Lo", "Beatriz Barbier de Oliveira (IR)",
-        "Bruno Jose Marques Limberger (IR)", "Carolina Pasinatto Tonini", "Cecilia Pereira Ferreira",
-        "Elisa Patron Vicentin Moresco (IR)", "Gabriel dos Santos Cunico (IR)", "Ingrid Vitoria Rodrigues Dos Santos",
-        "João Miguel Moraes De Araújo", "Jordana Francener Colet", "Júlia Prates Gomes", "Júlia Rodrigues Arakaki (IR)",
-        "Laura Gimenes Knippelberg (IR)", "Livia Camilo De Mendonça", "Lucas Borgert Oliveira (IR)",
-        "Luiz Otávio Straliotto Miotto (IR)", "Luiza Carraro Hernandes", "Maria Alice Bogotoli",
-        "Maria Alice Rossoni Macarini", "Maria Cecilia Perdomo Veronka", "Maria Fernanda Alban Menezes",
-        "Maria Fernanda Moraes de Carvalho", "Maria Valentina Portes Dos Santos", "Maria Vitoria Bernardes Camara",
-        "Maria Vitória Lima Rossoni", "Marina Tavares Moreira", "Micaella Saracho Targa (IR)",
-        "Miguel Angelo Dias De Lima", "Miguel Figueiredo Biazotto", "Milena de Oliveira Souza",
-        "Nicole Maria Silva Sá", "Pedro Henrique Lepri Ribeiro", "Pedro Straliotto Silva",
-        "Renata Valentina Izolan Coldebella", "Sofia Farias Bael", "Vitoria Camilo Rocha (IR)", "Yasmin Padilha Da Silva"
+      const coroinhasNames = [
+        "Bárbara Kaori Muta Lo", "Yasmin Padilha Da Silva", "Bruno Jose Marques Limberger (IR)",
+        "Maria Fernanda Alban Menezes", "Micaella Saracho Targa (IR)", "Maria Alice Rossoni Macarini",
+        "Júlia Prates Gomes", "Elisa Patron Vicentin Moresco (IR)", "Ana Sofia Carriel Costa (IR)",
+        "Carolina Pasinatto Tonini", "Beatriz Barbier de Oliveira (IR)", "Marina Tavares Moreira",
+        "Luiz Otávio Straliotto Miotto (IR)", "Vitoria Camilo Rocha (IR)", "Ana Helena Menezes Ozorio",
+        "Nicole Maria Silva Sá", "Laura Gimenes Knippelberg (IR)", "Antonella Oruê De Lima",
+        "Cecilia Pereira Ferreira", "Maria Vitoria Bernardes Camara", "Gabriel dos Santos Cunico (IR)",
+        "Milena de Oliveira Souza", "Luiza Carraro Hernandes", "Maria Cecilia Perdomo Veronka",
+        "Ingrid Vitoria Rodrigues Dos Santos", "Maria Vitória Lima Rossoni", "Maria Alice Bogotoli",
+        "Pedro Straliotto Silva", "Jordana Francener Colet", "Maria Fernanda Moraes de Carvalho",
+        "Pedro Henrique Lepri Ribeiro", "Maria Valentina Portes Dos Santos", "Júlia Rodrigues Arakaki (IR)",
+        "Barbara Frota Da Silva", "Renata Valentina Izolan Coldebella", "Miguel Angelo Dias De Lima",
+        "Sofia Farias Bael", "Arthur Henrique Mareco Grubert", "João Miguel Moraes De Araújo",
+        "Livia Camilo De Mendonça", "Alice Santolin Da Silva", "Miguel Figueiredo Biazotto",
+        "Antonio Carlos de Souza Alba (IR)", "Lucas Borgert Oliveira (IR)"
       ];
 
-      // Add Servers
-      for (const name of acolitos) {
-        try {
-          await addDoc(collection(db, 'servers'), { name, type: 'acolito', active: true, ownerId: user.uid });
-        } catch (e) {
-          handleFirestoreError(e, OperationType.CREATE, 'servers');
-        }
+      const nameToId: Record<string, string> = {};
+
+      // Create Servers and track IDs
+      for (const name of acolitosNames) {
+        const docRef = await addDoc(collection(db, 'servers'), { name, type: 'acolito', active: true, ownerId: user.uid });
+        nameToId[name] = docRef.id;
       }
-      for (const name of coroinhas) {
-        try {
-          await addDoc(collection(db, 'servers'), { name, type: 'coroinha', active: true, ownerId: user.uid });
-        } catch (e) {
-          handleFirestoreError(e, OperationType.CREATE, 'servers');
-        }
+      for (const name of coroinhasNames) {
+        const docRef = await addDoc(collection(db, 'servers'), { name, type: 'coroinha', active: true, ownerId: user.uid });
+        nameToId[name] = docRef.id;
       }
 
-      // Add Standard Masses for April and May 2026
-      const dates = [
-        "2026-04-05", "2026-04-12", "2026-04-19", "2026-04-26",
-        "2026-05-03", "2026-05-10", "2026-05-17", "2026-05-24", "2026-05-31"
+      const getIds = (names: string[]) => names.map(n => nameToId[n]).filter(id => !!id);
+
+      // --- APRIL 2026 REAL SCHEDULE ---
+      const realMasses = [
+        // Domingo 05/04
+        { title: "Missa de Domingo", date: "2026-04-05", time: "07:30", location: "Matriz", ac: ["Daniel Queiroz De Souza", "Andrey Henrique Gotttems Rossatte", "Pedro Lucas Souza Bael"], co: ["Bárbara Kaori Muta Lo", "Yasmin Padilha Da Silva", "Bruno Jose Marques Limberger (IR)", "Maria Fernanda Alban Menezes"] },
+        { title: "Missa de Domingo", date: "2026-04-05", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Ezequiel Barbosa Velasco", "Mario Antonio Matiazi"], co: ["Micaella Saracho Targa (IR)", "Maria Alice Rossoni Macarini"] },
+        { title: "Missa de Domingo", date: "2026-04-05", time: "09:00", location: "São José e São Bento", ac: ["Júlia Machado Stival", "Leonardo Gabriel Alonso Moreira"], co: ["Júlia Prates Gomes", "Elisa Patron Vicentin Moresco (IR)"] },
+        { title: "Missa de Domingo", date: "2026-04-05", time: "10:00", location: "Matriz", ac: ["Lucas Andreetta Ortega", "Luiza Emanuelle De Siqueira Freitas", "Leonardo Alcântara"], co: ["Ana Sofia Carriel Costa (IR)", "Carolina Pasinatto Tonini", "Beatriz Barbier de Oliveira (IR)", "Marina Tavares Moreira"] },
+        { title: "Missa de Domingo", date: "2026-04-05", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Lara Beatriz Neves Barbosa (IR)", "Luiz Otavio Pereira"], co: ["Luiz Otávio Straliotto Miotto (IR)", "Vitoria Camilo Rocha (IR)"] },
+        { title: "Missa de Domingo", date: "2026-04-05", time: "19:00", location: "Matriz", ac: ["Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes", "Gabrielly Matos De Souza"], co: ["Ana Helena Menezes Ozorio", "Nicole Maria Silva Sá", "Laura Gimenes Knippelberg (IR)", "Antonella Oruê De Lima"] },
+        { title: "Missa de Domingo", date: "2026-04-05", time: "19:00", location: "São José Operário", ac: ["Luiz Otavio Pereira", "Lucas Andreetta Ortega"], co: ["Cecilia Pereira Ferreira", "Maria Vitoria Bernardes Camara"] },
+
+        // Weekdays 07/04 - 11/04
+        { title: "Missa/Terça", date: "2026-04-07", time: "19:00", location: "Caacupé", ac: ["Mario Antonio Matiazi"], co: ["Elisa Patron Vicentin Moresco (IR)", "Gabriel dos Santos Cunico (IR)"] },
+        { title: "Missa/Quarta", date: "2026-04-08", time: "19:00", location: "Matriz", ac: ["Eric Padilha De Matos", "Pedro Lucas Souza Bael", "Sarah Souza De Oliveira"], co: ["Milena de Oliveira Souza", "Luiza Carraro Hernandes", "Maria Cecilia Perdomo Veronka", "Bruno Jose Marques Limberger (IR)"] },
+        { title: "Missa/Quinta", date: "2026-04-09", time: "19:00", location: "São Vicente e São Benedito", ac: ["Daniel Queiroz De Souza"], co: ["Maria Cecilia Perdomo Veronka", "Maria Alice Rossoni Macarini"] },
+        { title: "Missa/Sexta", date: "2026-04-10", time: "19:00", location: "Santa Luzia", ac: ["Eric Padilha De Matos", "Luiza Emanuelle De Siqueira Freitas", "Júlia Machado Stival"], co: ["Maria Vitória Lima Rossoni", "Ingrid Vitoria Rodrigues Dos Santos"] },
+        { title: "Missa/Sábado", date: "2026-04-11", time: "19:00", location: "São Pedro e São Paulo", ac: ["Leonardo Gabriel Alonso Moreira", "Daniel Queiroz De Souza", "Lucas Andreetta Ortega"], co: ["Milena de Oliveira Souza", "Maria Alice Bogotoli"] },
+
+        // Domingo 12/04
+        { title: "Missa de Domingo", date: "2026-04-12", time: "07:30", location: "Matriz", ac: ["Gabrielly Matos De Souza", "Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes"], co: ["Pedro Straliotto Silva", "Jordana Francener Colet", "Maria Vitória Lima Rossoni", "Maria Fernanda Moraes de Carvalho"] },
+        { title: "Missa de Domingo", date: "2026-04-12", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara"], co: ["Pedro Henrique Lepri Ribeiro", "Maria Valentina Portes Dos Santos"] },
+        { title: "Missa de Domingo", date: "2026-04-12", time: "09:00", location: "São José e São Bento", ac: ["Andrey Henrique Gotttems Rossatte", "Ezequiel Barbosa Velasco"], co: ["Júlia Rodrigues Arakaki (IR)", "Maria Alice Bogotoli"] },
+        { title: "Missa de Domingo", date: "2026-04-12", time: "10:00", location: "Matriz", ac: ["Daniel Queiroz De Souza", "Mario Antonio Matiazi", "Júlia Machado Stival"], co: ["Bárbara Kaori Muta Lo", "Barbara Frota Da Silva", "Renata Valentina Izolan Coldebella", "Miguel Angelo Dias De Lima"] },
+        { title: "Missa de Domingo", date: "2026-04-12", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Luiza Emanuelle De Siqueira Freitas", "Leonardo Gabriel Alonso Moreira"], co: ["Carolina Pasinatto Tonini", "Sofia Farias Bael"] },
+        { title: "Missa de Domingo", date: "2026-04-12", time: "19:00", location: "Matriz", ac: ["Pedro Lucas Souza Bael", "Lucas Andreetta Ortega", "Luiz Otavio Pereira"], co: ["Cecilia Pereira Ferreira", "Arthur Henrique Mareco Grubert", "João Miguel Moraes De Araújo", "Ingrid Vitoria Rodrigues Dos Santos"] },
+        { title: "Missa de Domingo", date: "2026-04-12", time: "19:00", location: "São José Operário", ac: ["Andrey Henrique Gotttems Rossatte", "Leonardo Alcântara"], co: ["Livia Camilo De Mendonça", "Alice Santolin Da Silva"] },
+
+        // Extra Weekday 14/04
+        { title: "Missa/Terça", date: "2026-04-14", time: "19:00", location: "Bom Samaritano", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Ana Sofia Carriel Costa (IR)", "João Miguel Moraes De Araújo"] },
+
+        // Matriz 15/04 (Wednesday)
+        { title: "Novena", date: "2026-04-15", time: "19:00", location: "Matriz", ac: ["Ezequiel Barbosa Velasco", "Leonardo Gabriel Alonso Moreira", "Júlia Machado Stival"], co: ["Ana Sofia Carriel Costa (IR)", "Alice Santolin Da Silva", "Vitoria Camilo Rocha (IR)", "Arthur Henrique Mareco Grubert"] },
+
+        // 16/04 - 18/04
+        { title: "Quinta-Feira Santa", date: "2026-04-16", time: "19:00", location: "São Vicente e São Benedito", ac: ["Mario Antonio Matiazi"], co: ["Pedro Straliotto Silva", "Pedro Henrique Lepri Ribeiro"] },
+        { title: "Sexta-Feira Santa", date: "2026-04-17", time: "19:00", location: "Santa Luzia", ac: ["Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara", "Sarah Souza De Oliveira"], co: ["Maria Valentina Portes Dos Santos", "Miguel Figueiredo Biazotto"] },
+        { title: "Sábado de Aleluia", date: "2026-04-18", time: "19:00", location: "São Pedro e São Paulo", ac: ["Eric Padilha De Matos", "Luiza Emanuelle De Siqueira Freitas", "Luiz Otavio Pereira"], co: ["Livia Camilo De Mendonça", "Barbara Frota Da Silva"] },
+
+        // Domingo 19/04
+        { title: "Missa de Páscoa", date: "2026-04-19", time: "07:30", location: "Matriz", ac: ["Pedro Lucas Souza Bael", "Mario Antonio Matiazi", "Júlia Machado Stival"], co: ["Antonio Carlos de Souza Alba (IR)", "Júlia Rodrigues Arakaki (IR)", "Maria Valentina Portes Dos Santos", "Ingrid Vitoria Rodrigues Dos Santos"] },
+        { title: "Missa de Páscoa", date: "2026-04-19", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Ana Gabrielly Riquelme Fernandes", "Leonardo Gabriel Alonso Moreira"], co: ["Antonella Oruê De Lima", "Maria Vitoria Bernardes Camara"] },
+        { title: "Missa de Páscoa", date: "2026-04-19", time: "09:00", location: "São José e São Bento", ac: ["Sarah Souza De Oliveira", "Daniel Queiroz De Souza"], co: ["Livia Camilo De Mendonça", "Maria Vitória Lima Rossoni"] },
+        { title: "Missa de Páscoa", date: "2026-04-19", time: "10:00", location: "Matriz", ac: ["Ezequiel Barbosa Velasco", "Luiza Emanuelle De Siqueira Freitas", "Gabrielly Matos De Souza"], co: ["Carolina Pasinatto Tonini", "Lucas Borgert Oliveira (IR)", "Júlia Prates Gomes", "Maria Alice Bogotoli"] },
+        { title: "Missa de Páscoa", date: "2026-04-19", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Lucas Andreetta Ortega", "Lara Beatriz Neves Barbosa (IR)"], co: ["Bruno Jose Marques Limberger (IR)", "Arthur Henrique Mareco Grubert"] },
+        { title: "Missa de Páscoa", date: "2026-04-19", time: "19:00", location: "Matriz", ac: ["Leonardo Alcântara", "Andrey Henrique Gotttems Rossatte", "Eric Padilha De Matos"], co: ["Alice Santolin Da Silva", "Ana Helena Menezes Ozorio", "Yasmin Padilha Da Silva", "Sofia Farias Bael"] },
+        { title: "Missa de Páscoa", date: "2026-04-19", time: "19:00", location: "São José Operário", ac: ["Luiz Otavio Pereira", "Ana Gabrielly Riquelme Fernandes"], co: ["Cecilia Pereira Ferreira", "Luiz Otávio Straliotto Miotto (IR)"] },
+
+        // Weekdays 21/04 - 25/04
+        { title: "Missa/Terça", date: "2026-04-21", time: "19:00", location: "Caacupé", ac: ["Eric Padilha De Matos"], co: ["Pedro Straliotto Silva", "Laura Gimenes Knippelberg (IR)"] },
+        { title: "Missa/Quarta", date: "2026-04-22", time: "19:00", location: "Matriz", ac: ["Ana Gabrielly Riquelme Fernandes", "Pedro Lucas Souza Bael", "Eric Padilha De Matos"], co: ["Gabriel dos Santos Cunico (IR)", "Ana Helena Menezes Ozorio", "Antonio Carlos de Souza Alba (IR)", "Júlia Rodrigues Arakaki (IR)"] },
+        { title: "Missa/Quinta", date: "2026-04-23", time: "19:00", location: "São Vicente e São Benedito", ac: ["Luiz Otavio Pereira"], co: ["Miguel Figueiredo Biazotto", "Maria Cecilia Perdomo Veronka"] },
+        { title: "Missa/Sexta", date: "2026-04-24", time: "19:00", location: "Santa Luzia", ac: ["Daniel Queiroz De Souza", "Lucas Andreetta Ortega", "Ezequiel Barbosa Velasco"], co: ["Micaella Saracho Targa (IR)", "Luiz Otávio Straliotto Miotto (IR)"] },
+        { title: "Missa/Sábado", date: "2026-04-25", time: "19:00", location: "São Pedro e São Paulo", ac: ["Pedro Lucas Souza Bael", "Ana Gabrielly Riquelme Fernandes", "Leonardo Alcântara"], co: ["Jordana Francener Colet", "Maria Vitoria Bernardes Camara"] },
+
+        // Domingo 26/04
+        { title: "Missa de Domingo", date: "2026-04-26", time: "07:30", location: "Matriz", ac: ["Leonardo Gabriel Alonso Moreira", "Sarah Souza De Oliveira", "Gabrielly Matos De Souza"], co: ["Milena de Oliveira Souza", "Miguel Figueiredo Biazotto", "João Miguel Moraes De Araújo", "Miguel Angelo Dias De Lima"] },
+        { title: "Missa de Domingo", date: "2026-04-26", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Daniel Queiroz De Souza", "Luiza Emanuelle De Siqueira Freitas"], co: ["Vitoria Camilo Rocha (IR)", "Maria Alice Rossoni Macarini"] },
+        { title: "Missa de Domingo", date: "2026-04-26", time: "09:00", location: "São José e São Bento", ac: ["Ezequiel Barbosa Velasco", "Mario Antonio Matiazi"], co: ["Bárbara Kaori Muta Lo", "Micaella Saracho Targa (IR)"] },
+        { title: "Missa de Domingo", date: "2026-04-26", time: "10:00", location: "Matriz", ac: ["Eric Padilha De Matos", "Júlia Machado Stival", "Pedro Lucas Souza Bael"], co: ["Gabriel dos Santos Cunico (IR)", "Beatriz Barbier de Oliveira (IR)", "Pedro Henrique Lepri Ribeiro", "Laura Gimenes Knippelberg (IR)"] },
+        { title: "Missa de Domingo", date: "2026-04-26", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Leonardo Alcântara", "Ana Gabrielly Riquelme Fernandes"], co: ["Carolina Pasinatto Tonini", "Lucas Borgert Oliveira (IR)"] },
+        { title: "Missa de Domingo", date: "2026-04-26", time: "19:00", location: "Matriz", ac: ["Lara Beatriz Neves Barbosa (IR)", "Lucas Andreetta Ortega", "Luiz Otavio Pereira"], co: ["Antonio Carlos de Souza Alba (IR)", "Maria Fernanda Alban Menezes", "Marina Tavares Moreira", "Jordana Francener Colet"] },
+        { title: "Missa de Domingo", date: "2026-04-26", time: "19:00", location: "São José Operário", ac: ["Andrey Henrique Gotttems Rossatte", "Ezequiel Barbosa Velasco"], co: ["Cecilia Pereira Ferreira", "Barbara Frota Da Silva"] },
+
+        // Weekdays 28/04 - 30/04
+        { title: "Missa/Terça", date: "2026-04-28", time: "19:00", location: "Bom Samaritano", ac: ["Luiza Emanuelle De Siqueira Freitas"], co: ["Yasmin Padilha Da Silva", "Miguel Angelo Dias De Lima"] },
+        { title: "Missa/Quarta", date: "2026-04-29", time: "19:00", location: "Matriz", ac: ["Mario Antonio Matiazi", "Sarah Souza De Oliveira", "Júlia Machado Stival"], co: ["Cecilia Pereira Ferreira", "Antonella Oruê De Lima", "Marina Tavares Moreira", "Sofia Farias Bael"] },
+        { title: "Missa/Quinta", date: "2026-04-30", time: "19:00", location: "São Vicente e São Benedito", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Lucas Borgert Oliveira (IR)", "Maria Fernanda Alban Menezes"] },
       ];
-      for (const d of dates) {
+
+      for (const mass of realMasses) {
+        await addDoc(collection(db, 'masses'), {
+          title: mass.title,
+          date: mass.date,
+          time: mass.time,
+          location: mass.location,
+          assignments: {
+            acolitos: getIds(mass.ac),
+            coroinhas: getIds(mass.co)
+          },
+          ownerId: user.uid
+        });
+      }
+
+      // --- MAY 2026 TEMPLATES (Empty assignments for future scaling) ---
+      const mayDates = ["2026-05-03", "2026-05-10", "2026-05-17", "2026-05-24", "2026-05-31"];
+      for (const d of mayDates) {
         const isMothersDay = d === "2026-05-10";
         const isPentecost = d === "2026-05-24";
         
@@ -257,28 +337,11 @@ export default function App() {
           await addDoc(collection(db, 'masses'), { ...template, date: d, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
         }
       }
-
-      // Add Weekday Masses mentioned in rules and extras
-      const extraMasses = [
-        { title: "Novena", date: "2026-04-01", time: "19:00", location: "Matriz" },
-        { title: "Caacupé", date: "2026-04-07", time: "19:00", location: "Caacupé" },
-        { title: "São Vicente", date: "2026-04-09", time: "19:00", location: "São Vicente e São Benedito" },
-        { title: "Santa Luzia", date: "2026-04-10", time: "19:00", location: "Santa Luzia" },
-        { title: "São Pedro e São Paulo", date: "2026-04-11", time: "19:00", location: "São Pedro e São Paulo" },
-        { title: "Bom Samaritano", date: "2026-04-14", time: "19:00", location: "Bom Samaritano" },
-        { title: "Novena", date: "2026-04-15", time: "19:30", location: "Matriz" },
-        { title: "São José Operário", date: "2026-05-01", time: "19:00", location: "São José Operário" },
-        { title: "Trezenas de Santo Antônio", date: "2026-05-31", time: "19:00", location: "Santo Antônio" },
-      ];
-
-      for (const mass of extraMasses) {
-        await addDoc(collection(db, 'masses'), { ...mass, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
-      }
       
-      alert("Base de dados importada com sucesso!");
+      alert("Base de dados REAL de Abril 2026 importada com sucesso!");
     } catch (err) {
       console.error("Erro ao importar base:", err);
-      alert("Houve um erro ao importar a base. Verifique as permissões do banco de dados.");
+      alert("Houve um erro ao importar a base. Verifique sua conexão.");
     } finally {
       setIsSeeding(false);
     }
