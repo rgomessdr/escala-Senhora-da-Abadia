@@ -63,7 +63,12 @@ export default function App() {
     setAuthError(null);
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-      if (error) throw error;
+      if (error) {
+        if (error.message === 'Email not confirmed') {
+          throw new Error('E-mail não confirmado. No Supabase, vá em "Authentication" -> "Users" e exclua seu usuário e crie-o novamente, ou confirme-o clicando nos "3 pontinhos" ao lado do usuário.');
+        }
+        throw error;
+      }
     } catch (error: any) {
       console.error("Erro de Login:", error);
       setAuthError(error.message || 'Erro ao acessar o sistema.');
@@ -80,7 +85,12 @@ export default function App() {
           data: { display_name: name }
         }
       });
-      if (error) throw error;
+      if (error) {
+        if (error.message === 'Email not confirmed') {
+          throw new Error('Conta criada! Mas você precisa confirmar o e-mail ou desativar a confirmação no Supabase (Authentication -> Providers -> Email -> Confirm email).');
+        }
+        throw error;
+      }
     } catch (error: any) {
       console.error("Erro de Cadastro:", error);
       setAuthError(error.message || 'Erro ao criar conta.');
