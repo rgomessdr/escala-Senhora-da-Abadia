@@ -61,7 +61,7 @@ function handleSupabaseError(error: any, operationType: OperationType, path: str
 const AUTHORIZED_EMAILS = [
   'diogoortega@gmail.com',
   'rodrigo--gomes@hotmail.com',
-  'rodrigogomessdr@gmail.com' // Incluído para permitir que você (o dono) acesse e configure
+  'rodrigogomessdr@gmail.com'
 ];
 
 const SETUP_SQL = `-- EXECUTE ESTE SQL NO SQL EDITOR DO SUPABASE
@@ -138,13 +138,15 @@ export default function App() {
     setAuthError(null);
     
     // Validar e-mail localmente antes de tentar login (opcional, mas bom para UX)
-    if (!AUTHORIZED_EMAILS.includes(email.toLowerCase())) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase()).includes(normalizedEmail)) {
+      console.warn("Bloqueio de Email:", normalizedEmail);
       setAuthError('Este e-mail não tem permissão para acessar o sistema.');
       return;
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: pass });
       if (error) {
         if (error.message === 'Email not confirmed') {
           throw new Error('E-mail não confirmado. No Supabase, vá em "Authentication" -> "Users" e exclua seu usuário e crie-o novamente, ou confirme-o clicando nos "3 pontinhos" ao lado do usuário.');
@@ -189,7 +191,8 @@ export default function App() {
       const currentUser = session?.user ?? null;
       
       // Verificação extra de segurança no carregamento inicial
-      if (currentUser && currentUser.email && !AUTHORIZED_EMAILS.includes(currentUser.email.toLowerCase())) {
+      const normalizedAuthEmails = AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase());
+      if (currentUser && currentUser.email && !normalizedAuthEmails.includes(currentUser.email.trim().toLowerCase())) {
          supabase.auth.signOut();
          setUser(null);
          setAuthError('Usuário não autorizado.');
@@ -204,7 +207,8 @@ export default function App() {
       const currentUser = session?.user ?? null;
       
       // Verificação de segurança em tempo real
-      if (currentUser && currentUser.email && !AUTHORIZED_EMAILS.includes(currentUser.email.toLowerCase())) {
+      const normalizedAuthEmails = AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase());
+      if (currentUser && currentUser.email && !normalizedAuthEmails.includes(currentUser.email.trim().toLowerCase())) {
          supabase.auth.signOut();
          setUser(null);
          setAuthError('Usuário não autorizado.');
