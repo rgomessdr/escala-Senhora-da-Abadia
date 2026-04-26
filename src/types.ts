@@ -11,6 +11,12 @@ export interface Server {
   ownerId: string;
 }
 
+export interface Community {
+  id: string;
+  name: string;
+  ownerId: string;
+}
+
 export interface Mass {
   id: string;
   title: string;
@@ -24,4 +30,4 @@ export interface Mass {
   ownerId: string;
 }
 
-export type View = 'dashboard' | 'members' | 'masses' | 'schedule';
+export type View = 'dashboard' | 'members' | 'masses' | 'schedule' | 'communities';

@@ -72,6 +72,20 @@ export const db = {
     },
     delete: (id: string) => supabase.from('servers').delete().eq('id', id),
   },
+  communities: {
+    list: (userId: string) => supabase.from('communities').select('*').eq('owner_id', userId),
+    insert: (data: any) => {
+      const isArray = Array.isArray(data);
+      const items = isArray ? data : [data];
+      const payload = items.map(item => ({
+        name: item.name,
+        owner_id: item.owner_id || item.ownerId
+      }));
+      return supabase.from('communities').insert(payload).select();
+    },
+    update: (id: string, name: string) => supabase.from('communities').update({ name }).eq('id', id),
+    delete: (id: string) => supabase.from('communities').delete().eq('id', id),
+  },
   masses: {
     list: (userId: string) => supabase.from('masses').select('*').eq('owner_id', userId),
     insert: (data: any) => {

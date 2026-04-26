@@ -29,7 +29,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
-import { Server, Mass, View, ServerRole } from './types';
+import { Server, Mass, View, ServerRole, Community } from './types';
 import { User } from '@supabase/supabase-js';
 
 // --- Error Handling ---
@@ -53,6 +53,7 @@ export default function App() {
   const [view, setView] = useState<View>('dashboard');
   const [servers, setServers] = useState<Server[]>([]);
   const [masses, setMasses] = useState<Mass[]>([]);
+  const [communities, setCommunities] = useState<Community[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [connStatus, setConnStatus] = useState<{success: boolean, message: string} | null>(null);
@@ -123,13 +124,15 @@ export default function App() {
     if (!user) return;
     
     try {
-      const [serversRes, massesRes] = await Promise.all([
+      const [serversRes, massesRes, communitiesRes] = await Promise.all([
         sdb.servers.list(user.id),
-        sdb.masses.list(user.id)
+        sdb.masses.list(user.id),
+        sdb.communities.list(user.id)
       ]);
 
       if (serversRes.error) throw serversRes.error;
       if (massesRes.error) throw massesRes.error;
+      if (communitiesRes.error) throw communitiesRes.error;
 
       setServers(serversRes.data.map(s => ({
         id: s.id,
@@ -151,11 +154,17 @@ export default function App() {
         assignments: m.assignments,
         ownerId: m.owner_id
       })));
+
+      setCommunities(communitiesRes.data.map(c => ({
+        id: c.id,
+        name: c.name,
+        ownerId: c.owner_id
+      })));
     } catch (err: any) {
       console.error("Error fetching data:", err);
       // Tratar erro de permissão (RLS)
       if (err.code === '42501' || err.message?.includes('permission denied') || err.message?.includes('Forbidden')) {
-        alert("⚠️ ERRO DE PERMISSÃO: Você precisa configurar as Políticas (RLS) no Supabase. Vá em 'Autentication' -> 'Policies' e libere as tabelas 'servers' e 'masses' para usuários logados.");
+        alert("⚠️ ERRO DE PERMISSÃO: Você precisa configurar as Políticas (RLS) no Supabase. Vá em 'Autentication' -> 'Policies' e libere as tabelas 'servers', 'masses' e 'communities' para usuários logados.");
       }
     }
   };
@@ -198,17 +207,21 @@ export default function App() {
 
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const clearAllData = async () => {    if (!user || isDeleting) return;
-    if (!window.confirm("ATENÇÃO: Isso apagará TODOS os servidores e missas cadastrados. Deseja continuar?")) return;
+  const clearAllData = async () => {
+    if (!user || isDeleting) return;
+    if (!window.confirm("ATENÇÃO: Isso apagará TODOS os servidores, missas e comunidades cadastrados. Deseja continuar?")) return;
     
     setIsDeleting(true);
     try {
-      // Delete all servers and masses for the current user
-      const { error: serverErr } = await supabase.from('servers').delete().eq('owner_id', user.id);
-      if (serverErr) throw serverErr;
-      
+      // Usar sdb para deletar tudo (ou via supabase direto se preferir, mas sdb é mais consistente)
       const { error: massErr } = await supabase.from('masses').delete().eq('owner_id', user.id);
       if (massErr) throw massErr;
+
+      const { error: serverErr } = await supabase.from('servers').delete().eq('owner_id', user.id);
+      if (serverErr) throw serverErr;
+
+      const { error: commErr } = await supabase.from('communities').delete().eq('owner_id', user.id);
+      if (commErr) throw commErr;
       
       alert("Todos os dados foram excluídos com sucesso.");
       fetchData();
@@ -236,13 +249,58 @@ export default function App() {
     }
   };
 
+  const updateServer = async (id: string, data: Partial<Server>) => {
+    if (!user) return;
+    try {
+      const { error } = await sdb.servers.update(id, data);
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.UPDATE, `servers/${id}`);
+    }
+  };
+
   const removeServer = async (id: string) => {
+    if (!window.confirm("Deseja realmente excluir este servidor?")) return;
     try {
       const { error } = await sdb.servers.delete(id);
       if (error) throw error;
       fetchData();
     } catch (err) {
       handleSupabaseError(err, OperationType.DELETE, `servers/${id}`);
+    }
+  };
+
+  const addCommunity = async (name: string) => {
+    if (!user) return;
+    try {
+      const { error } = await sdb.communities.insert({ name, ownerId: user.id });
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.CREATE, 'communities');
+    }
+  };
+
+  const updateCommunity = async (id: string, name: string) => {
+    if (!user) return;
+    try {
+      const { error } = await sdb.communities.update(id, name);
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.UPDATE, `communities/${id}`);
+    }
+  };
+
+  const removeCommunity = async (id: string) => {
+    if (!window.confirm("Deseja realmente excluir esta comunidade?")) return;
+    try {
+      const { error } = await sdb.communities.delete(id);
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.DELETE, `communities/${id}`);
     }
   };
 
@@ -265,12 +323,24 @@ export default function App() {
   };
 
   const removeMass = async (id: string) => {
+    if (!window.confirm("Deseja realmente excluir esta missa?")) return;
     try {
       const { error } = await sdb.masses.delete(id);
       if (error) throw error;
       fetchData();
     } catch (err) {
       handleSupabaseError(err, OperationType.DELETE, `masses/${id}`);
+    }
+  };
+
+  const updateMass = async (id: string, data: Partial<Mass>) => {
+    if (!user) return;
+    try {
+      const { error } = await sdb.masses.update(id, data);
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.UPDATE, `masses/${id}`);
     }
   };
 
@@ -507,6 +577,7 @@ export default function App() {
         <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
           <NavTab active={view === 'dashboard'} onClick={() => setView('dashboard')} label="Dashboard" />
           <NavTab active={view === 'members'} onClick={() => setView('members')} label="Membros" />
+          <NavTab active={view === 'communities'} onClick={() => setView('communities')} label="Comunidades" />
           <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
           <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label="Montar Escala" />
         </div>
@@ -551,6 +622,7 @@ export default function App() {
               <div className="space-y-2">
                 <NavButtonView active={view === 'dashboard'} onClick={() => { setView('dashboard'); setIsSidebarOpen(false); }} icon={<LayoutDashboard size={18} />} label="Dashboard" />
                 <NavButtonView active={view === 'members'} onClick={() => { setView('members'); setIsSidebarOpen(false); }} icon={<Users size={18} />} label="Membros" />
+                <NavButtonView active={view === 'communities'} onClick={() => { setView('communities'); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label="Comunidades" />
                 <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<Church size={18} />} label="Missas" />
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
               </div>
@@ -586,9 +658,28 @@ export default function App() {
                 isDeleting={isDeleting}
               />
             )}
-            {view === 'members' && <MembersView servers={servers} onAdd={addServer} onDelete={removeServer} stats={serverStats} />}
-            {view === 'masses' && <MassesView masses={masses} onAdd={addMass} onDelete={removeMass} />}
-            {view === 'schedule' && <ScheduleView masses={masses} servers={servers} onToggle={toggleAssignment} stats={serverStats} autoSchedule={autoSchedule} clearSchedule={clearSchedule} />}
+            {view === 'members' && <MembersView servers={servers} onAdd={addServer} onUpdate={updateServer} onDelete={removeServer} stats={serverStats} />}
+            {view === 'communities' && <CommunitiesView communities={communities} onAdd={addCommunity} onUpdate={updateCommunity} onDelete={removeCommunity} />}
+            {view === 'masses' && (
+              <MassesView 
+                masses={masses} 
+                servers={servers} 
+                onAdd={addMass} 
+                onDelete={removeMass} 
+                onUpdate={updateMass} 
+                communities={communities}
+              />
+            )}
+            {view === 'schedule' && (
+              <ScheduleView 
+                masses={masses} 
+                servers={servers} 
+                onToggle={toggleAssignment} 
+                stats={serverStats} 
+                autoSchedule={autoSchedule} 
+                clearSchedule={clearSchedule} 
+              />
+            )}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -940,21 +1031,40 @@ function StatCardV2({ label, value, icon, color, alert }: any) {
   );
 }
 
-function MembersView({ servers, onAdd, onDelete, stats }: any) {
+function MembersView({ servers, onAdd, onUpdate, onDelete, stats }: any) {
   const [name, setName] = useState('');
   const [type, setType] = useState<ServerRole>('coroinha');
   const [email, setEmail] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onAdd({ name, type, email, whatsapp, birthDate });
+
+    if (editingId) {
+      onUpdate(editingId, { name, type, email, whatsapp, birthDate });
+      setEditingId(null);
+    } else {
+      onAdd({ name, type, email, whatsapp, birthDate });
+    }
+
     setName('');
     setEmail('');
     setWhatsapp('');
     setBirthDate('');
+    setType('coroinha');
+  };
+
+  const startEdit = (s: any) => {
+    setEditingId(s.id);
+    setName(s.name);
+    setType(s.type);
+    setEmail(s.email || '');
+    setWhatsapp(s.whatsapp || '');
+    setBirthDate(s.birthDate || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -977,7 +1087,9 @@ function MembersView({ servers, onAdd, onDelete, stats }: any) {
               <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
                 <UserPlus size={20} />
               </div>
-              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Cadastro Manual</h2>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                {editingId ? 'Editar Membro' : 'Cadastro Manual'}
+              </h2>
             </div>
 
             <div className="space-y-4">
@@ -1034,8 +1146,17 @@ function MembersView({ servers, onAdd, onDelete, stats }: any) {
               </div>
 
               <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
-                <Plus size={18} /> Salvar Membro
+                <Plus size={18} /> {editingId ? 'Atualizar Membro' : 'Salvar Membro'}
               </button>
+              {editingId && (
+                <button 
+                  type="button" 
+                  onClick={() => { setEditingId(null); setName(''); setEmail(''); setWhatsapp(''); setBirthDate(''); setType('coroinha'); }}
+                  className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancelar Edição
+                </button>
+              )}
             </div>
           </form>
         </div>
@@ -1073,6 +1194,9 @@ function MembersView({ servers, onAdd, onDelete, stats }: any) {
                     </div>
                   </div>
                   <div className="flex gap-1">
+                    <button onClick={() => startEdit(s)} className="p-2 text-slate-200 hover:text-indigo-600 transition-colors">
+                      <ChevronRight size={18} />
+                    </button>
                     <button onClick={() => onDelete(s.id)} className="p-2 text-slate-200 hover:text-rose-500 transition-colors group/trash">
                       <Trash2 size={18} className="group-hover/trash:scale-110 transition-transform" />
                     </button>
@@ -1101,19 +1225,156 @@ function RoleSelector({ active, onClick, label }: any) {
   );
 }
 
-function MassesView({ masses, onAdd, onDelete }: any) {
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [location, setLocation] = useState('Matriz Paroquial');
+function CommunitiesView({ communities, onAdd, onUpdate, onDelete }: any) {
+  const [name, setName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !date || !time) return;
-    onAdd(title, date, time, location);
+    if (!name.trim()) return;
+    
+    if (editingId) {
+      onUpdate(editingId, name);
+      setEditingId(null);
+    } else {
+      onAdd(name);
+    }
+    setName('');
+  };
+
+  const startEdit = (c: any) => {
+    setEditingId(c.id);
+    setName(c.name);
+  };
+
+  return (
+    <div className="space-y-8">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Territorial</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Comunidades</h1>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1">
+          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <MapPin size={20} />
+              </div>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                {editingId ? 'Editar Local' : 'Novo Local'}
+              </h2>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome da Comunidade</label>
+                <input 
+                  type="text" 
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Ex: Capela Santa Luzia"
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                />
+              </div>
+
+              <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
+                <Plus size={18} /> {editingId ? 'Atualizar Local' : 'Salvar Local'}
+              </button>
+              {editingId && (
+                <button 
+                  type="button" 
+                  onClick={() => { setEditingId(null); setName(''); }}
+                  className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+
+        <div className="lg:col-span-2">
+          {communities.length === 0 ? (
+            <div className="h-64 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center px-10">
+              <MapPin size={48} className="text-slate-100 mb-4" />
+              <p className="font-bold text-slate-400">Nenhuma comunidade cadastrada.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {communities.map((c: any) => (
+                <div key={c.id} className="glass-card p-5 flex items-center justify-between group">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 font-bold">
+                      <MapPin size={18} />
+                    </div>
+                    <h4 className="font-bold text-slate-800 uppercase text-sm tracking-tight">{c.name}</h4>
+                  </div>
+                  <div className="flex gap-1 transform opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => startEdit(c)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                      <ChevronRight size={18} />
+                    </button>
+                    <button onClick={() => onDelete(c.id)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MassesView({ masses, onAdd, onUpdate, onDelete, communities }: any) {
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [location, setLocation] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (communities.length > 0 && !location) {
+      setLocation(communities[0].name);
+    }
+  }, [communities, location]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !date || !time || !location) return;
+    
+    if (editingId) {
+      onUpdate(editingId, { title, date, time, location });
+      setEditingId(null);
+    } else {
+      onAdd(title, date, time, location);
+    }
+    
     setTitle('');
     setDate('');
     setTime('');
+    // Manter a localização selecionada se houver comunidades
+  };
+
+  const startEdit = (m: any) => {
+    setEditingId(m.id);
+    setTitle(m.title);
+    setDate(m.date);
+    setTime(m.time);
+    setLocation(m.location);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setTitle('');
+    setDate('');
+    setTime('');
+    if (communities.length > 0) setLocation(communities[0].name);
   };
 
   return (
@@ -1131,7 +1392,9 @@ function MassesView({ masses, onAdd, onDelete }: any) {
               <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
                 <Church size={20} />
               </div>
-              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Novo Evento</h2>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                {editingId ? 'Editar Evento' : 'Novo Evento'}
+              </h2>
             </div>
 
             <div className="space-y-4">
@@ -1151,19 +1414,40 @@ function MassesView({ masses, onAdd, onDelete }: any) {
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Localização</label>
-                <input type="text" value={location} onChange={e => setLocation(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
+                {communities.length > 0 ? (
+                  <select 
+                    value={location} 
+                    onChange={e => setLocation(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 appearance-none"
+                  >
+                    {communities.map((c: any) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                    <option value="Outro">Outro...</option>
+                  </select>
+                ) : (
+                  <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="Ex: Matriz Paroquial" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" />
+                )}
+                {location === 'Outro' && (
+                  <input type="text" onChange={e => setLocation(e.target.value)} placeholder="Digite o local" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 mt-2" />
+                )}
               </div>
               <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl">
-                 Agendar Missa
+                 {editingId ? 'Atualizar Missa' : 'Agendar Missa'}
               </button>
+              {editingId && (
+                <button type="button" onClick={cancelEdit} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">
+                  Cancelar Edição
+                </button>
+              )}
             </div>
         </form>
 
         <div className="lg:col-span-2 space-y-4">
            {masses.length === 0 ? (
-             <div className="h-64 flex flex-col items-center justify-center glass-card border-dashed">
+             <div className="h-64 flex flex-col items-center justify-center glass-card border-dashed text-center px-10">
                 <Calendar size={48} className="text-slate-100 mb-4" />
-                <p className="font-bold text-slate-400">Nenhuma celebração agendada.</p>
+                <p className="font-bold text-slate-400 text-sm">Nenhuma celebração agendada para o futuro.</p>
              </div>
            ) : (
              masses.map((m: any) => (
@@ -1181,9 +1465,12 @@ function MassesView({ masses, onAdd, onDelete }: any) {
                         </div>
                       </div>
                    </div>
-                   <div className="flex items-center md:flex-col md:items-end gap-4 md:gap-2">
-                      <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest md:mb-1">Participantes: {m.assignments.acolitos.length + m.assignments.coroinhas.length}</div>
-                      <button onClick={() => onDelete(m.id)} className="p-3 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
+                   <div className="flex items-center gap-2">
+                      <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest mr-4 hidden xl:block">Participantes: {m.assignments.acolitos.length + m.assignments.coroinhas.length}</div>
+                      <button onClick={() => startEdit(m)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+                        <ChevronRight size={20} />
+                      </button>
+                      <button onClick={() => onDelete(m.id)} className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
                         <Trash2 size={20} />
                       </button>
                    </div>
