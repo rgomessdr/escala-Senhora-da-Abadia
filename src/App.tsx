@@ -25,22 +25,9 @@ import {
   Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  deleteDoc, 
-  doc, 
-  updateDoc,
-  getDocFromServer,
-  getDocs,
-  writeBatch
-} from 'firebase/firestore';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { db, auth, loginWithEmail, registerWithEmail, signOut } from './lib/firebase';
+import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 import { Server, Mass, View, ServerRole } from './types';
+import { User } from '@supabase/supabase-js';
 
 // --- Error Handling ---
 enum OperationType {
@@ -52,30 +39,9 @@ enum OperationType {
   WRITE = 'write',
 }
 
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-  }
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+function handleSupabaseError(error: any, operationType: OperationType, path: string | null) {
+  console.error(`Supabase ${operationType} Error on ${path}:`, error);
+  throw error;
 }
 
 export default function App() {
@@ -86,87 +52,111 @@ export default function App() {
   const [masses, setMasses] = useState<Mass[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [connStatus, setConnStatus] = useState<{success: boolean, message: string} | null>(null);
 
-  // Connection Test
+  // Connection check
   useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        // Silently log or handle connection issues - common on initial server cold start
-        console.warn("Iniciando conexão com o banco de dados...");
-      }
-    }
-    testConnection();
+    checkSupabaseConnection().then(setConnStatus);
   }, []);
 
   const handleEmailLogin = async (email: string, pass: string) => {
     setAuthError(null);
     try {
-      await loginWithEmail(email, pass);
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (error) throw error;
     } catch (error: any) {
       console.error("Erro de Login:", error);
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-        setAuthError('Credenciais inválidas. Verifique seu e-mail e senha.');
-      } else if (error.code === 'auth/invalid-email') {
-        setAuthError('Formato de e-mail inválido.');
-      } else if (error.code === 'auth/operation-not-allowed') {
-        setAuthError('O login por E-mail/Senha precisa ser ativado no Firebase Console (Authentication > Sign-in method).');
-      } else {
-        setAuthError(`Erro ao acessar o sistema: ${error.message || error.code}`);
-      }
+      setAuthError(error.message || 'Erro ao acessar o sistema.');
     }
   };
 
   const handleEmailRegister = async (email: string, pass: string, name: string) => {
     setAuthError(null);
     try {
-      await registerWithEmail(email, pass, name);
+      const { error } = await supabase.auth.signUp({ 
+        email, 
+        password: pass,
+        options: {
+          data: { display_name: name }
+        }
+      });
+      if (error) throw error;
     } catch (error: any) {
       console.error("Erro de Cadastro:", error);
-      if (error.code === 'auth/email-already-in-use') {
-        setAuthError('Este administrador já está cadastrado.');
-      } else if (error.code === 'auth/weak-password') {
-        setAuthError('A senha deve ter pelo menos 6 caracteres.');
-      } else if (error.code === 'auth/operation-not-allowed') {
-        setAuthError('O cadastro por E-mail/Senha precisa ser ativado no Firebase Console.');
-      } else {
-        setAuthError(`Erro ao criar conta: ${error.message || error.code}`);
-      }
+      setAuthError(error.message || 'Erro ao criar conta.');
     }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
   };
 
   // Auth Listener
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
-      setUser(u);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
       setLoading(false);
     });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Firestore Listeners
-  useEffect(() => {
-    if (!user) {
-      setServers([]);
-      setMasses([]);
-      return;
+  // Data Fetching
+  const fetchData = async () => {
+    if (!user) return;
+    
+    try {
+      const [serversRes, massesRes] = await Promise.all([
+        sdb.servers.list(user.id),
+        sdb.masses.list(user.id)
+      ]);
+
+      if (serversRes.error) throw serversRes.error;
+      if (massesRes.error) throw massesRes.error;
+
+      setServers(serversRes.data.map(s => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        active: s.active,
+        ownerId: s.owner_id
+      })));
+
+      setMasses(massesRes.data.map(m => ({
+        id: m.id,
+        title: m.title,
+        date: m.date,
+        time: m.time,
+        location: m.location,
+        assignments: m.assignments,
+        ownerId: m.owner_id
+      })));
+    } catch (err) {
+      console.error("Error fetching data:", err);
     }
+  };
 
-    const serversQuery = query(collection(db, 'servers'), where('ownerId', '==', user.uid));
-    const unsubServers = onSnapshot(serversQuery, (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Server));
-      setServers(data);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'servers'));
+  useEffect(() => {
+    fetchData();
+    
+    // Set up real-time subscriptions
+    if (!user) return;
 
-    const massesQuery = query(collection(db, 'masses'), where('ownerId', '==', user.uid));
-    const unsubMasses = onSnapshot(massesQuery, (snapshot) => {
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Mass));
-      setMasses(data);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, 'masses'));
+    const serversSub = supabase.channel('servers-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'servers', filter: `owner_id=eq.${user.id}` }, () => fetchData())
+      .subscribe();
+
+    const massesSub = supabase.channel('masses-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'masses', filter: `owner_id=eq.${user.id}` }, () => fetchData())
+      .subscribe();
 
     return () => {
-      unsubServers();
-      unsubMasses();
+      serversSub.unsubscribe();
+      massesSub.unsubscribe();
     };
   }, [user]);
 
@@ -229,30 +219,22 @@ export default function App() {
         nameToId[s.name.trim()] = s.id;
       });
 
-      // Step 2: Create batch for missing servers
-      const serverBatch = writeBatch(db);
-      let newServerCount = 0;
+      // Step 2: Prepare and insert missing servers
+      const missingAcolitos = acolitosNames.filter(n => !nameToId[n.trim()]);
+      const missingCoroinhas = coroinhasNames.filter(n => !nameToId[n.trim()]);
 
-      const prepareServer = (name: string, type: 'acolito' | 'coroinha') => {
-        const normalized = name.trim();
-        if (!nameToId[normalized]) {
-          const newDocRef = doc(collection(db, 'servers'));
-          serverBatch.set(newDocRef, { 
-            name: normalized, 
-            type, 
-            active: true, 
-            ownerId: user.uid 
-          });
-          nameToId[normalized] = newDocRef.id;
-          newServerCount++;
-        }
-      };
-
-      acolitosNames.forEach(n => prepareServer(n, 'acolito'));
-      coroinhasNames.forEach(n => prepareServer(n, 'coroinha'));
-
-      if (newServerCount > 0) {
-        await serverBatch.commit();
+      if (missingAcolitos.length > 0 || missingCoroinhas.length > 0) {
+        const serversToInsert = [
+          ...missingAcolitos.map(n => ({ name: n.trim(), type: 'acolito', active: true, owner_id: user.id })),
+          ...missingCoroinhas.map(n => ({ name: n.trim(), type: 'coroinha', active: true, owner_id: user.id }))
+        ];
+        
+        const { data, error } = await sdb.servers.insert(serversToInsert);
+        if (error) throw error;
+        
+        data?.forEach(s => {
+          nameToId[s.name.trim()] = s.id;
+        });
       }
 
       const getIds = (names: string[]) => names.map(n => nameToId[n.trim()]).filter(id => !!id);
@@ -307,9 +289,10 @@ export default function App() {
         { title: "Missa/Quinta", date: "2026-04-30", time: "19:00", location: "São Vicente e São Benedito", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Lucas Borgert Oliveira (IR)", "Maria Fernanda Alban Menezes"] },
       ];
 
-      // Step 3: Create batch for masses
-      const massBatch = writeBatch(db);
-      
+      // Step 3: Insert/Update masses
+      const massesToInsert: any[] = [];
+      const massesToUpdate: any[] = [];
+
       realMasses.forEach((mass) => {
         const massData = {
           title: mass.title,
@@ -320,14 +303,14 @@ export default function App() {
             acolitos: getIds(mass.ac),
             coroinhas: getIds(mass.co)
           },
-          ownerId: user.uid
+          ownerId: user.id
         };
         
         const existingMass = masses.find(m => m.date === mass.date && m.time === mass.time && m.location === mass.location);
         if (existingMass) {
-          massBatch.update(doc(db, 'masses', existingMass.id), massData);
+          massesToUpdate.push({ id: existingMass.id, ...massData });
         } else {
-          massBatch.set(doc(collection(db, 'masses')), massData);
+          massesToInsert.push(massData);
         }
       });
 
@@ -350,17 +333,25 @@ export default function App() {
         massTemplates.forEach((template) => {
           const exists = masses.find(m => m.date === d && m.time === template.time && m.location === template.location);
           if (!exists) {
-            massBatch.set(doc(collection(db, 'masses')), { 
+            massesToInsert.push({ 
               ...template, 
               date: d, 
               assignments: { acolitos: [], coroinhas: [] }, 
-              ownerId: user.uid 
+              ownerId: user.id 
             });
           }
         });
       });
 
-      await massBatch.commit();
+      if (massesToInsert.length > 0) {
+        const { error } = await sdb.masses.insert(massesToInsert);
+        if (error) throw error;
+      }
+      
+      for (const m of massesToUpdate) {
+        const { error } = await sdb.masses.update(m.id, m);
+        if (error) throw error;
+      }
       
       alert("Base de dados REAL de Abril 2026 importada com sucesso!");
     } catch (err) {
@@ -379,18 +370,15 @@ export default function App() {
     
     setIsDeleting(true);
     try {
-      const batch = writeBatch(db);
+      // Delete all servers and masses for the current user
+      const { error: serverErr } = await supabase.from('servers').delete().eq('owner_id', user.id);
+      if (serverErr) throw serverErr;
       
-      // Delete all servers for this owner
-      const serverSnap = await getDocs(query(collection(db, 'servers'), where('ownerId', '==', user.uid)));
-      serverSnap.docs.forEach(d => batch.delete(d.ref));
+      const { error: massErr } = await supabase.from('masses').delete().eq('owner_id', user.id);
+      if (massErr) throw massErr;
       
-      // Delete all masses for this owner
-      const massSnap = await getDocs(query(collection(db, 'masses'), where('ownerId', '==', user.uid)));
-      massSnap.docs.forEach(d => batch.delete(d.ref));
-      
-      await batch.commit();
       alert("Todos os dados foram excluídos com sucesso.");
+      fetchData();
     } catch (err) {
       console.error("Erro ao excluir dados:", err);
       alert("Erro ao excluir dados. Verifique sua conexão.");
@@ -403,46 +391,54 @@ export default function App() {
   const addServer = async (name: string, type: ServerRole) => {
     if (!user) return;
     try {
-      await addDoc(collection(db, 'servers'), {
+      const { error } = await sdb.servers.insert({
         name,
         type,
         active: true,
-        ownerId: user.uid
+        ownerId: user.id
       });
+      if (error) throw error;
+      fetchData();
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'servers');
+      handleSupabaseError(err, OperationType.CREATE, 'servers');
     }
   };
 
   const removeServer = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'servers', id));
+      const { error } = await sdb.servers.delete(id);
+      if (error) throw error;
+      fetchData();
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `servers/${id}`);
+      handleSupabaseError(err, OperationType.DELETE, `servers/${id}`);
     }
   };
 
   const addMass = async (title: string, date: string, time: string, location: string) => {
     if (!user) return;
     try {
-      await addDoc(collection(db, 'masses'), {
+      const { error } = await sdb.masses.insert({
         title,
         date,
         time,
         location,
         assignments: { acolitos: [], coroinhas: [] },
-        ownerId: user.uid
+        ownerId: user.id
       });
+      if (error) throw error;
+      fetchData();
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'masses');
+      handleSupabaseError(err, OperationType.CREATE, 'masses');
     }
   };
 
   const removeMass = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'masses', id));
+      const { error } = await sdb.masses.delete(id);
+      if (error) throw error;
+      fetchData();
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `masses/${id}`);
+      handleSupabaseError(err, OperationType.DELETE, `masses/${id}`);
     }
   };
 
@@ -457,11 +453,13 @@ export default function App() {
       : [...mass.assignments[category], serverId];
 
     try {
-      await updateDoc(doc(db, 'masses', massId), {
-        [`assignments.${category}`]: updatedList
+      const { error } = await sdb.masses.update(massId, {
+        assignments: { ...mass.assignments, [category]: updatedList }
       });
+      if (error) throw error;
+      fetchData();
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `masses/${massId}`);
+      handleSupabaseError(err, OperationType.UPDATE, `masses/${massId}`);
     }
   };
 
@@ -600,16 +598,20 @@ export default function App() {
       }
 
       try {
-        await updateDoc(doc(db, 'masses', mass.id), {
-          'assignments.acolitos': newAcolitos,
-          'assignments.coroinhas': newCoroinhas
+        const { error } = await sdb.masses.update(mass.id, {
+          assignments: {
+            acolitos: newAcolitos,
+            coroinhas: newCoroinhas
+          }
         });
+        if (error) throw error;
       } catch (err) {
         console.error("Error smart-scheduling mass", mass.id, err);
         alert("Erro ao salvar escala automatica. Verifique sua conexão.");
         return;
       }
     }
+    fetchData();
     alert("Escala montada com sucesso!");
   };
 
@@ -617,14 +619,15 @@ export default function App() {
     if (!user || !window.confirm('Deseja realmente limpar TODOS os escalados de todas as missas?')) return;
     for (const mass of masses) {
       try {
-        await updateDoc(doc(db, 'masses', mass.id), {
-          'assignments.acolitos': [],
-          'assignments.coroinhas': []
+        const { error } = await sdb.masses.update(mass.id, {
+          assignments: { acolitos: [], coroinhas: [] }
         });
+        if (error) throw error;
       } catch (err) {
         console.error("Error clearing mass", mass.id, err);
       }
     }
+    fetchData();
   };
 
   if (loading) {
@@ -655,7 +658,15 @@ export default function App() {
             <Church size={22} />
           </div>
           <div className="hidden sm:block">
-            <h1 className="text-sm font-bold tracking-tight text-slate-800 uppercase leading-none">Abadia Sidrolândia</h1>
+            <h1 className="text-sm font-bold tracking-tight text-slate-800 uppercase leading-none flex items-center gap-2">
+              Abadia Sidrolândia
+              {connStatus && (
+                <div 
+                  className={`w-2 h-2 rounded-full ${connStatus.success ? 'bg-emerald-500' : 'bg-rose-500'} animate-pulse`} 
+                  title={connStatus.message}
+                />
+              )}
+            </h1>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Gestão de Escalas • MS</p>
           </div>
         </div>
@@ -671,11 +682,11 @@ export default function App() {
         {/* User / Logout */}
         <div className="flex items-center gap-4">
           <div className="hidden md:flex flex-col items-end mr-2">
-            <span className="text-xs font-bold text-slate-700">{user.displayName || 'Usuário'}</span>
-            <button onClick={signOut} className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors">Sair</button>
+            <span className="text-xs font-bold text-slate-700">{user.user_metadata?.display_name || 'Usuário'}</span>
+            <button onClick={handleSignOut} className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors">Sair</button>
           </div>
           <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 uppercase">
-            {user.displayName?.[0] || user.email?.[0] || '?'}
+            {(user.user_metadata?.display_name?.[0]) || user.email?.[0] || '?'}
           </div>
           <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-2 text-slate-600">
             {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
@@ -712,7 +723,7 @@ export default function App() {
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
               </div>
               <div className="mt-auto pt-6 border-t">
-                <button onClick={signOut} className="w-full flex items-center gap-3 p-3 text-rose-500 font-bold text-sm hover:bg-rose-50 rounded-xl transition-colors">
+                <button onClick={handleSignOut} className="w-full flex items-center gap-3 p-3 text-rose-500 font-bold text-sm hover:bg-rose-50 rounded-xl transition-colors">
                   <LogOut size={18} /> Sair do Sistema
                 </button>
               </div>
@@ -905,8 +916,8 @@ function AuthView({
               </button>
 
               <div className="pt-4 border-t border-slate-100">
-                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight leading-relaxed max-w-[200px] mx-auto">
-                  Importante: O administrador deve ativar o método "E-mail/Senha" no console do Firebase para que o acesso funcione.
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight leading-relaxed max-w-[200px] mx-auto text-center">
+                  Utilizando Supabase para autenticação e banco de dados SQL.
                 </p>
               </div>
             </div>
