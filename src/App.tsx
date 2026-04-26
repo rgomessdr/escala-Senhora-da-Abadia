@@ -224,33 +224,38 @@ export default function App() {
 
       const nameToId: Record<string, string> = {};
       
-      // Map existing servers to avoid duplicates
+      // Step 1: Identify existing servers
       servers.forEach(s => {
-        nameToId[s.name] = s.id;
+        nameToId[s.name.trim()] = s.id;
       });
 
-      // Create missing servers in parallel
-      const acolitoPromises = acolitosNames.filter(n => !nameToId[n]).map(async (name) => {
-        try {
-          const docRef = await addDoc(collection(db, 'servers'), { name, type: 'acolito', active: true, ownerId: user.uid });
-          nameToId[name] = docRef.id;
-        } catch (e) {
-          handleFirestoreError(e, OperationType.CREATE, 'servers');
+      // Step 2: Create batch for missing servers
+      const serverBatch = writeBatch(db);
+      let newServerCount = 0;
+
+      const prepareServer = (name: string, type: 'acolito' | 'coroinha') => {
+        const normalized = name.trim();
+        if (!nameToId[normalized]) {
+          const newDocRef = doc(collection(db, 'servers'));
+          serverBatch.set(newDocRef, { 
+            name: normalized, 
+            type, 
+            active: true, 
+            ownerId: user.uid 
+          });
+          nameToId[normalized] = newDocRef.id;
+          newServerCount++;
         }
-      });
+      };
 
-      const coroinhaPromises = coroinhasNames.filter(n => !nameToId[n]).map(async (name) => {
-        try {
-          const docRef = await addDoc(collection(db, 'servers'), { name, type: 'coroinha', active: true, ownerId: user.uid });
-          nameToId[name] = docRef.id;
-        } catch (e) {
-          handleFirestoreError(e, OperationType.CREATE, 'servers');
-        }
-      });
+      acolitosNames.forEach(n => prepareServer(n, 'acolito'));
+      coroinhasNames.forEach(n => prepareServer(n, 'coroinha'));
 
-      await Promise.all([...acolitoPromises, ...coroinhaPromises]);
+      if (newServerCount > 0) {
+        await serverBatch.commit();
+      }
 
-      const getIds = (names: string[]) => names.map(n => nameToId[n]).filter(id => !!id);
+      const getIds = (names: string[]) => names.map(n => nameToId[n.trim()]).filter(id => !!id);
 
       // --- APRIL 2026 REAL SCHEDULE ---
       const realMasses = [
@@ -302,37 +307,33 @@ export default function App() {
         { title: "Missa/Quinta", date: "2026-04-30", time: "19:00", location: "São Vicente e São Benedito", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Lucas Borgert Oliveira (IR)", "Maria Fernanda Alban Menezes"] },
       ];
 
-      // Add/Update masses in parallel
-      const massPromises = realMasses.map(async (mass) => {
-        try {
-          const massData = {
-            title: mass.title,
-            date: mass.date,
-            time: mass.time,
-            location: mass.location,
-            assignments: {
-              acolitos: getIds(mass.ac),
-              coroinhas: getIds(mass.co)
-            },
-            ownerId: user.uid
-          };
-          
-          const existingMass = masses.find(m => m.date === mass.date && m.time === mass.time && m.location === mass.location);
-          if (existingMass) {
-            await updateDoc(doc(db, 'masses', existingMass.id), massData);
-          } else {
-            await addDoc(collection(db, 'masses'), massData);
-          }
-        } catch (e) {
-          handleFirestoreError(e, OperationType.WRITE, 'masses');
+      // Step 3: Create batch for masses
+      const massBatch = writeBatch(db);
+      
+      realMasses.forEach((mass) => {
+        const massData = {
+          title: mass.title,
+          date: mass.date,
+          time: mass.time,
+          location: mass.location,
+          assignments: {
+            acolitos: getIds(mass.ac),
+            coroinhas: getIds(mass.co)
+          },
+          ownerId: user.uid
+        };
+        
+        const existingMass = masses.find(m => m.date === mass.date && m.time === mass.time && m.location === mass.location);
+        if (existingMass) {
+          massBatch.update(doc(db, 'masses', existingMass.id), massData);
+        } else {
+          massBatch.set(doc(collection(db, 'masses')), massData);
         }
       });
 
-      await Promise.all(massPromises);
-
       // --- MAY 2026 TEMPLATES ---
       const mayDates = ["2026-05-03", "2026-05-10", "2026-05-17", "2026-05-24", "2026-05-31"];
-      const mayPromises = mayDates.flatMap(d => {
+      mayDates.forEach(d => {
         const isMothersDay = d === "2026-05-10";
         const isPentecost = d === "2026-05-24";
         
@@ -346,19 +347,20 @@ export default function App() {
           { title: "Missa de Domingo", time: "19:00", location: "São José Operário" },
         ];
         
-        return massTemplates.map(async (template) => {
-          try {
-            const exists = masses.find(m => m.date === d && m.time === template.time && m.location === template.location);
-            if (!exists) {
-              await addDoc(collection(db, 'masses'), { ...template, date: d, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
-            }
-          } catch (e) {
-            handleFirestoreError(e, OperationType.CREATE, 'masses');
+        massTemplates.forEach((template) => {
+          const exists = masses.find(m => m.date === d && m.time === template.time && m.location === template.location);
+          if (!exists) {
+            massBatch.set(doc(collection(db, 'masses')), { 
+              ...template, 
+              date: d, 
+              assignments: { acolitos: [], coroinhas: [] }, 
+              ownerId: user.uid 
+            });
           }
         });
       });
 
-      await Promise.all(mayPromises);
+      await massBatch.commit();
       
       alert("Base de dados REAL de Abril 2026 importada com sucesso!");
     } catch (err) {
