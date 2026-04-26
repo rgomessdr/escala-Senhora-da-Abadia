@@ -5,13 +5,17 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 // If configuration is missing, we alert in the console and provide a placeholder
 // to prevent the app from completely crashing on boot, though features will fail.
-if (!supabaseUrl || !supabaseAnonKey) {
+if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('eyJ') || supabaseAnonKey.length < 20) {
   console.error(
-    "⚠️ Configuração do Supabase incompleta!\n" +
-    "No painel 'Secrets' (engrenagem), adicione:\n" +
-    "1. Nome: VITE_SUPABASE_URL | Valor: pgfjgvtzvwtrlhhvcomg\n" +
-    "2. Nome: VITE_SUPABASE_ANON_KEY | Valor: {sua chave}\n" +
-    "Depois clique em 'Aplicar alterações'."
+    "⚠️ CONFIGURAÇÃO INCORRETA NO PAINEL SECRETS!\n\n" +
+    "Você deve configurar EXATAMENTE assim:\n" +
+    "1. Clique no ícone de Engrenagem (Settings) -> Secrets\n" +
+    "2. No campo NOME: VITE_SUPABASE_URL\n" +
+    "   No campo VALOR: pgfjgvtzvwtrlhhvcomg\n" +
+    "3. Clique em 'Adicionar segredo'\n" +
+    "4. No campo NOME: VITE_SUPABASE_ANON_KEY\n" +
+    "   No campo VALOR: (sua chave que começa com sb_publishable_...)\n" +
+    "5. CLIQUE EM 'APLICAR ALTERAÇÕES' no final do painel."
   );
 }
 
