@@ -60,8 +60,56 @@ function handleSupabaseError(error: any, operationType: OperationType, path: str
 // --- Configuration ---
 const AUTHORIZED_EMAILS = [
   'diogoortega@gmail.com',
-  'rodrigo--gomes@hotmail.com'
+  'rodrigo--gomes@hotmail.com',
+  'rodrigogomessdr@gmail.com' // Incluído para permitir que você (o dono) acesse e configure
 ];
+
+const SETUP_SQL = `-- EXECUTE ESTE SQL NO SQL EDITOR DO SUPABASE
+-- 1. Tabelas
+CREATE TABLE IF NOT EXISTS servers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('acólito', 'coroinha')),
+  active BOOLEAN DEFAULT TRUE,
+  email TEXT,
+  whatsapp TEXT,
+  birth_date DATE,
+  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS communities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS masses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  date DATE NOT NULL,
+  time TIME NOT NULL,
+  location TEXT NOT NULL,
+  assignments JSONB DEFAULT '{"acolitos": [], "coroinhas": []}'::JSONB,
+  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2. Segurança (RLS)
+ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE masses ENABLE ROW LEVEL SECURITY;
+
+-- 3. Políticas
+DROP POLICY IF EXISTS "Acesso Total Servidores" ON servers;
+CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (auth.uid() = owner_id);
+
+DROP POLICY IF EXISTS "Acesso Total Comunidades" ON communities;
+CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (auth.uid() = owner_id);
+
+DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
+CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (auth.uid() = owner_id);`;
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -74,9 +122,16 @@ export default function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [connStatus, setConnStatus] = useState<{success: boolean, message: string} | null>(null);
 
+  const [showSqlSetup, setShowSqlSetup] = useState(false);
+
   // Connection check
   useEffect(() => {
-    checkSupabaseConnection().then(setConnStatus);
+    checkSupabaseConnection().then((res) => {
+      setConnStatus(res);
+      if (!res.success && res.message.includes('não encontrada')) {
+        setShowSqlSetup(true);
+      }
+    });
   }, []);
 
   const handleEmailLogin = async (email: string, pass: string) => {
@@ -679,7 +734,65 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto p-4 md:p-8">
-        <AnimatePresence mode="wait">
+        {showSqlSetup && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-200">
+            <div className="p-6 bg-red-50 border-b border-red-100 flex items-center justify-between">
+              <div className="flex items-center gap-3 text-red-600">
+                <AlertCircle className="w-6 h-6" />
+                <h2 className="font-black uppercase tracking-wider text-sm text-red-700">Configuração do Banco Necessária</h2>
+              </div>
+              <button 
+                onClick={() => setShowSqlSetup(false)}
+                className="p-2 hover:bg-red-100 rounded-lg transition-colors text-red-400"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                Parece que as tabelas necessárias ainda não existem no seu projeto Supabase. 
+                Siga os passos abaixo para corrigir:
+              </p>
+              <ol className="text-xs text-slate-500 space-y-2 list-decimal ml-4 font-bold">
+                <li>Acesse o painel do Supabase do seu projeto.</li>
+                <li>No menu lateral, clique em <span className="text-indigo-600">SQL Editor</span>.</li>
+                <li>Clique em <span className="text-indigo-600">New Query</span>.</li>
+                <li>Cole o código abaixo e clique em <span className="text-indigo-600 font-extrabold underline">RUN</span>.</li>
+              </ol>
+              
+              <div className="relative group">
+                <pre className="bg-slate-900 text-slate-300 p-4 rounded-xl text-[10px] font-mono overflow-x-auto max-h-[300px] shadow-inner select-all">
+                  {SETUP_SQL}
+                </pre>
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(SETUP_SQL);
+                    alert("SQL copiado!");
+                  }}
+                  className="absolute top-2 right-2 p-2 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all opacity-0 group-hover:opacity-100 shadow-lg"
+                >
+                  Copiar SQL
+                </button>
+              </div>
+
+              <div className="pt-4 flex justify-between items-center">
+                <p className="text-[10px] text-slate-400 italic font-medium">
+                  Após executar o script, atualize esta página.
+                </p>
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-2 bg-slate-900 text-white rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg active:scale-95"
+                >
+                  Recarregar App
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">
           <motion.div
             key={view}
             initial={{ opacity: 0, y: 10 }}
