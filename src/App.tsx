@@ -57,6 +57,12 @@ function handleSupabaseError(error: any, operationType: OperationType, path: str
   throw error;
 }
 
+// --- Configuration ---
+const AUTHORIZED_EMAILS = [
+  'diogoortega@gmail.com',
+  'rodrigo--gomes@hotmail.com'
+];
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +81,13 @@ export default function App() {
 
   const handleEmailLogin = async (email: string, pass: string) => {
     setAuthError(null);
+    
+    // Validar e-mail localmente antes de tentar login (opcional, mas bom para UX)
+    if (!AUTHORIZED_EMAILS.includes(email.toLowerCase())) {
+      setAuthError('Este e-mail não tem permissão para acessar o sistema.');
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
       if (error) {
@@ -118,12 +131,31 @@ export default function App() {
   // Auth Listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      const currentUser = session?.user ?? null;
+      
+      // Verificação extra de segurança no carregamento inicial
+      if (currentUser && currentUser.email && !AUTHORIZED_EMAILS.includes(currentUser.email.toLowerCase())) {
+         supabase.auth.signOut();
+         setUser(null);
+         setAuthError('Usuário não autorizado.');
+      } else {
+         setUser(currentUser);
+      }
+      
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      const currentUser = session?.user ?? null;
+      
+      // Verificação de segurança em tempo real
+      if (currentUser && currentUser.email && !AUTHORIZED_EMAILS.includes(currentUser.email.toLowerCase())) {
+         supabase.auth.signOut();
+         setUser(null);
+         setAuthError('Usuário não autorizado.');
+      } else {
+         setUser(currentUser);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -554,7 +586,6 @@ export default function App() {
     return (
       <AuthView 
         onEmailLogin={handleEmailLogin}
-        onEmailRegister={handleEmailRegister}
         error={authError}
       />
     );
@@ -728,26 +759,17 @@ function NavButtonView({ active, onClick, icon, label }: { active: boolean, onCl
 
 function AuthView({ 
   onEmailLogin, 
-  onEmailRegister, 
   error 
 }: { 
   onEmailLogin: (email: string, pass: string) => void,
-  onEmailRegister: (email: string, pass: string, name: string) => void,
   error: string | null
 }) {
-  const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isRegistering) {
-      if (!name) return;
-      onEmailRegister(email, password, name);
-    } else {
-      onEmailLogin(email, password);
-    }
+    onEmailLogin(email, password);
   };
 
   return (
@@ -775,9 +797,9 @@ function AuthView({
             </div>
             
             <div className="text-center space-y-1 relative z-10">
-              <h2 className="text-xl font-bold text-slate-800">{isRegistering ? 'Nova Conta Paroquial' : 'Portal do Altar'}</h2>
+              <h2 className="text-xl font-bold text-slate-800">Portal do Altar</h2>
               <p className="text-xs text-slate-400 font-medium leading-relaxed">
-                {isRegistering ? 'Cadastre a equipe da nossa paróquia.' : 'Acesse a gestão de acólitos e coroinhas da Abadia.'}
+                Acesso restrito aos administradores autorizados da Abadia.
               </p>
             </div>
 
@@ -793,28 +815,15 @@ function AuthView({
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {isRegistering && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Seu Nome</label>
-                  <input 
-                    type="text"
-                    required
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner"
-                    placeholder="Ex: João Silva"
-                  />
-                </div>
-              )}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Administrativo</label>
                 <input 
                   type="email"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner"
-                  placeholder="paroquia@exemplo.com"
+                  placeholder="admin@exemplo.com"
                 />
               </div>
               <div className="space-y-1.5">
@@ -832,35 +841,21 @@ function AuthView({
 
               <button 
                 type="submit"
-                className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3"
+                className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3"
               >
-                {isRegistering ? <UserPlus size={18} /> : <LogIn size={18} />}
-                {isRegistering ? 'Criar Cadastro' : 'Entrar no Sistema'}
+                <LogIn size={18} />
+                Entrar no Sistema
               </button>
             </form>
 
             <div className="text-center pt-2 space-y-4">
-              <button 
-                type="button"
-                onClick={() => setIsRegistering(!isRegistering)}
-                className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest transition-colors flex flex-col items-center gap-1 mx-auto"
-              >
-                {isRegistering ? (
-                  <>
-                    <span>Já possui uma conta?</span>
-                    <span className="text-sm font-bold normal-case">Fazer Login</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Novo administrador?</span>
-                    <span className="text-sm font-bold normal-case">Criar nova conta de acesso</span>
-                  </>
-                )}
-              </button>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                Apenas usuários pré-cadastrados
+              </p>
 
               <div className="pt-4 border-t border-slate-100">
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight leading-relaxed max-w-[200px] mx-auto text-center">
-                  Utilizando Supabase para autenticação e banco de dados SQL.
+                  Segurança Paroquial • MS
                 </p>
               </div>
             </div>
