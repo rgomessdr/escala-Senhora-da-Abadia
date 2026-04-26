@@ -347,17 +347,28 @@ export default function App() {
       });
 
       // Step 2: Prepare and insert missing servers
-      const missingAcolitos = acolitosNames.filter(n => !nameToId[n.trim()]);
-      const missingCoroinhas = coroinhasNames.filter(n => !nameToId[n.trim()]);
+      const safeTrim = (n: any) => (typeof n === 'string' ? n.trim() : '');
+      
+      const missingAcolitos = acolitosNames
+        .map(safeTrim)
+        .filter(n => n.length > 0 && !nameToId[n]);
+        
+      const missingCoroinhas = coroinhasNames
+        .map(safeTrim)
+        .filter(n => n.length > 0 && !nameToId[n]);
 
       if (missingAcolitos.length > 0 || missingCoroinhas.length > 0) {
         const serversToInsert = [
-          ...missingAcolitos.map(n => ({ name: n.trim(), type: 'acolito', active: true, owner_id: user.id })),
-          ...missingCoroinhas.map(n => ({ name: n.trim(), type: 'coroinha', active: true, owner_id: user.id }))
+          ...missingAcolitos.map(n => ({ name: n, type: 'acolito', active: true, owner_id: user.id })),
+          ...missingCoroinhas.map(n => ({ name: n, type: 'coroinha', active: true, owner_id: user.id }))
         ];
         
+        console.log("Inserindo novos servidores:", serversToInsert);
         const { data, error } = await sdb.servers.insert(serversToInsert);
-        if (error) throw error;
+        if (error) {
+          console.error("Erro detalhado na inserção de servidores:", error);
+          throw error;
+        }
         
         data?.forEach(s => {
           nameToId[s.name.trim()] = s.id;
