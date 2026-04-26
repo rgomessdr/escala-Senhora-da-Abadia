@@ -21,7 +21,10 @@ import {
   Loader2,
   Download,
   MoreVertical,
-  Layers
+  Layers,
+  Github,
+  Globe,
+  Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -233,16 +236,22 @@ export default function App() {
         }
       }
 
-      // Add Standard Masses for April 2026
-      const dates = ["2026-04-05", "2026-04-12", "2026-04-19", "2026-04-26"];
+      // Add Standard Masses for April and May 2026
+      const dates = [
+        "2026-04-05", "2026-04-12", "2026-04-19", "2026-04-26",
+        "2026-05-03", "2026-05-10", "2026-05-17", "2026-05-24", "2026-05-31"
+      ];
       for (const d of dates) {
+        const isMothersDay = d === "2026-05-10";
+        const isPentecost = d === "2026-05-24";
+        
         const massTemplates = [
-          { title: "Missa de Domingo", time: "07:30", location: "Matriz" },
+          { title: isMothersDay ? "Missa de Dia das Mães" : (isPentecost ? "Missa de Pentecostes" : "Missa de Domingo"), time: "07:30", location: "Matriz" },
           { title: "Missa de Domingo", time: "08:00", location: "Nossa Senhora Das Graças" },
           { title: "Missa de Domingo", time: "09:00", location: "São José e São Bento" },
-          { title: "Missa de Domingo", time: "10:00", location: "Matriz" },
+          { title: isMothersDay ? "Missa de Dia das Mães" : (isPentecost ? "Missa de Pentecostes" : "Missa de Domingo"), time: "10:00", location: "Matriz" },
           { title: "Missa de Domingo", time: "17:00", location: "Nossa Senhora Aparecida" },
-          { title: "Missa de Domingo", time: "19:00", location: "Matriz" },
+          { title: isMothersDay ? "Missa de Dia das Mães" : (isPentecost ? "Missa de Pentecostes" : "Missa de Domingo"), time: "19:00", location: "Matriz" },
           { title: "Missa de Domingo", time: "19:00", location: "São José Operário" },
         ];
         
@@ -251,8 +260,8 @@ export default function App() {
         }
       }
 
-      // Add Weekday Masses mentioned in rules
-      const weekdays = [
+      // Add Weekday Masses mentioned in rules and extras
+      const extraMasses = [
         { title: "Novena", date: "2026-04-01", time: "19:00", location: "Matriz" },
         { title: "Caacupé", date: "2026-04-07", time: "19:00", location: "Caacupé" },
         { title: "São Vicente", date: "2026-04-09", time: "19:00", location: "São Vicente e São Benedito" },
@@ -260,9 +269,11 @@ export default function App() {
         { title: "São Pedro e São Paulo", date: "2026-04-11", time: "19:00", location: "São Pedro e São Paulo" },
         { title: "Bom Samaritano", date: "2026-04-14", time: "19:00", location: "Bom Samaritano" },
         { title: "Novena", date: "2026-04-15", time: "19:30", location: "Matriz" },
+        { title: "São José Operário", date: "2026-05-01", time: "19:00", location: "São José Operário" },
+        { title: "Trezenas de Santo Antônio", date: "2026-05-31", time: "19:00", location: "Santo Antônio" },
       ];
 
-      for (const mass of weekdays) {
+      for (const mass of extraMasses) {
         await addDoc(collection(db, 'masses'), { ...mass, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
       }
       
@@ -761,14 +772,30 @@ function AuthView({
               </button>
             </form>
 
-            <div className="text-center pt-2">
+            <div className="text-center pt-2 space-y-4">
               <button 
                 type="button"
                 onClick={() => setIsRegistering(!isRegistering)}
-                className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest transition-colors"
+                className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest transition-colors flex flex-col items-center gap-1 mx-auto"
               >
-                {isRegistering ? 'Já tem uma conta? Entre aqui' : 'Não tem uma conta exclusiva? Solicite acesso'}
+                {isRegistering ? (
+                  <>
+                    <span>Já possui uma conta?</span>
+                    <span className="text-sm font-bold normal-case">Fazer Login</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Novo administrador?</span>
+                    <span className="text-sm font-bold normal-case">Criar nova conta de acesso</span>
+                  </>
+                )}
               </button>
+
+              <div className="pt-4 border-t border-slate-100">
+                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight leading-relaxed max-w-[200px] mx-auto">
+                  Importante: O administrador deve ativar o método "E-mail/Senha" no console do Firebase para que o acesso funcione.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -785,19 +812,35 @@ function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, 
           <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Global</p>
           <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Dashboard</h1>
         </div>
-        <div className="flex gap-3">
-          <button 
-            onClick={seedBase}
-            disabled={isSeeding}
-            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-wait"
-          >
-             {isSeeding ? <Loader2 className="animate-spin" size={18} /> : null}
-             {isSeeding ? 'Importando...' : 'Importar Base'}
-          </button>
-          <button onClick={() => setView('schedule')} className="group flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
-            <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> Montar Nova Escala
-          </button>
-        </div>
+          <div className="flex gap-3">
+            <a 
+              href="https://github.com" 
+              target="_blank" 
+              rel="noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all border border-slate-200"
+            >
+               <Github size={12} /> GitHub
+            </a>
+            <a 
+              href="https://vercel.com" 
+              target="_blank" 
+              rel="noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all border border-slate-200"
+            >
+               <Globe size={12} /> Vercel
+            </a>
+            <button 
+              onClick={seedBase}
+              disabled={isSeeding}
+              className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-wait"
+            >
+               {isSeeding ? <Loader2 className="animate-spin" size={18} /> : null}
+               {isSeeding ? 'Importando...' : 'Importar Base'}
+            </button>
+            <button onClick={() => setView('schedule')} className="group flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
+              <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> Montar Nova Escala
+            </button>
+          </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1155,6 +1198,39 @@ function MassesView({ masses, onAdd, onDelete }: any) {
 function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(masses[0]?.id || null);
   const selectedMass = masses.find((m: any) => m.id === selectedMassId);
+  const selectedMassAssignments = useMemo(() => {
+    if (!selectedMass) return { acolitos: [], coroinhas: [] };
+    return {
+      acolitos: selectedMass.assignments.acolitos.map((id: string) => servers.find((s: any) => s.id === id)?.name).filter(Boolean),
+      coroinhas: selectedMass.assignments.coroinhas.map((id: string) => servers.find((s: any) => s.id === id)?.name).filter(Boolean)
+    };
+  }, [selectedMass, servers]);
+
+  const shareWhatsApp = () => {
+    if (!selectedMass) return;
+    const dateArr = selectedMass.date.split('-');
+    const formattedDate = `${dateArr[2]}/${dateArr[1]}/${dateArr[0]}`;
+    
+    let text = `*ESCALA DE ALTAR - ABADIA SIDROLÂNDIA*\n\n`;
+    text += `*CELEBRAÇÃO:* ${selectedMass.title.toUpperCase()}\n`;
+    text += `*DATA:* ${formattedDate}\n`;
+    text += `*HORÁRIO:* ${selectedMass.time}\n`;
+    text += `*LOCAL:* ${selectedMass.location}\n\n`;
+    
+    if (selectedMassAssignments.acolitos.length > 0) {
+      text += `*ACÓLITOS:*\n`;
+      selectedMassAssignments.acolitos.forEach((name: string) => text += `• ${name}\n`);
+      text += `\n`;
+    }
+    
+    if (selectedMassAssignments.coroinhas.length > 0) {
+      text += `*COROINHAS:*\n`;
+      selectedMassAssignments.coroinhas.forEach((name: string) => text += `• ${name}\n`);
+    }
+    
+    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
 
   return (
     <div className="space-y-8 flex-1 flex flex-col h-full overflow-hidden">
@@ -1175,6 +1251,12 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
             className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all"
           >
              <Layers size={16} /> Montagem Inteligente
+          </button>
+          <button 
+            onClick={shareWhatsApp}
+            className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all"
+          >
+             <Share2 size={16} /> WhatsApp
           </button>
           <button 
             onClick={() => window.print()}

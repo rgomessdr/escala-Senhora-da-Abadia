@@ -1,6 +1,6 @@
 {
-  "name": "Acólitos & Coroinhas Manager",
-  "description": "Sistema de gestão de escalas para coroinhas e acólitos com equilíbrio de participações e alertas de disponibilidade.",
+  "name": "Acólitos & Coroinhas - Abadia Sidrolândia",
+  "description": "Sistema oficial de gestão de escalas para a Paróquia Nossa Senhora da Abadia em Sidrolândia-MS. Gerenciamento de servidores, missas e escalas automáticas.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
