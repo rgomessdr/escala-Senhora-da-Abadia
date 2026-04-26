@@ -44,6 +44,16 @@ enum OperationType {
 
 function handleSupabaseError(error: any, operationType: OperationType, path: string | null) {
   console.error(`Supabase ${operationType} Error on ${path}:`, error);
+  
+  let msg = `Erro no banco de dados (${operationType}): ${error.message || 'Erro desconhecido'}`;
+  
+  if (error.code === 'PGRST204') {
+    msg = `⚠️ Erro Crítico: A tabela '${path}' não existe no Supabase. \n\nVocê precisa executar o comando SQL no painel do Supabase para criar as tabelas.`;
+  } else if (error.code === '42501') {
+    msg = `⚠️ Erro de Permissão (RLS): Você não tem permissão para realizar esta ação na tabela '${path}'.`;
+  }
+  
+  alert(msg);
   throw error;
 }
 

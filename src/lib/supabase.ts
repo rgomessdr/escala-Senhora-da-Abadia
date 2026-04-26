@@ -23,19 +23,27 @@ export const supabase = createClient(finalUrl, cleanKey || 'placeholder-key');
 
 export const checkSupabaseConnection = async () => {
   try {
-    // Tenta uma busca simples para validar a conexão
-    const { error } = await supabase.from('servers').select('count', { count: 'exact', head: true });
+    // Tenta uma busca simples para validar a conexão em todas as tabelas principais
+    const { error: serverError } = await supabase.from('servers').select('count', { count: 'exact', head: true });
+    const { error: massError } = await supabase.from('masses').select('count', { count: 'exact', head: true });
+    const { error: communityError } = await supabase.from('communities').select('count', { count: 'exact', head: true });
     
-    if (error) {
-       // Se o erro for 'PGRST116' (no rows) ou sucesso sem erro, está OK.
-       // 'PGRST204' (relation does not exist) significa que a chave está OK mas as tabelas não foram criadas no SQL Editor.
-       if (error.code === 'PGRST204') {
-         return { success: false, message: "Conectado! Mas as tabelas (servers/masses) ainda não foram criadas no SQL Editor do Supabase." };
-       }
-       
-       console.warn("Erro de conexão Supabase:", error.message, error.code);
-       return { success: false, message: `Erro ${error.code}: ${error.message}` };
+    if (serverError && serverError.code === 'PGRST204') {
+      return { success: false, message: "Tabela 'servers' não encontrada. Execute o SQL Script." };
     }
+    if (massError && massError.code === 'PGRST204') {
+      return { success: false, message: "Tabela 'masses' não encontrada. Execute o SQL Script." };
+    }
+    if (communityError && communityError.code === 'PGRST204') {
+      return { success: false, message: "Tabela 'communities' não encontrada. Execute o SQL Script no Supabase." };
+    }
+
+    if (serverError || massError || communityError) {
+       const err = serverError || massError || communityError;
+       console.warn("Erro de conexão Supabase:", err?.message);
+       return { success: false, message: `Erro: ${err?.message}` };
+    }
+
     return { success: true, message: "Tudo pronto! Banco de dados conectado." };
   } catch (err: any) {
     return { success: false, message: "Erro de rede ou URL inválida" };
@@ -75,8 +83,7 @@ export const db = {
   communities: {
     list: (userId: string) => supabase.from('communities').select('*').eq('owner_id', userId),
     insert: (data: any) => {
-      const isArray = Array.isArray(data);
-      const items = isArray ? data : [data];
+      const items = Array.isArray(data) ? data : [data];
       const payload = items.map(item => ({
         name: item.name,
         owner_id: item.owner_id || item.ownerId
