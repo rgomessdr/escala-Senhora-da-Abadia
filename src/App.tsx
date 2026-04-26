@@ -29,8 +29,17 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { GoogleGenAI, Type } from "@google/genai";
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
+// Safe access to Gemini Key
+const getApiKey = () => {
+  try {
+    return process.env.GEMINI_API_KEY || '';
+  } catch (e) {
+    return '';
+  }
+};
+
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 import { Server, Mass, View, ServerRole } from './types';
 import { User } from '@supabase/supabase-js';
 
@@ -225,7 +234,7 @@ export default function App() {
       }
 
       // 🔑 Call Gemini to parse
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: getApiKey() });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Analise este texto de uma escala paroquial e extraia os dados estruturados.
@@ -893,7 +902,21 @@ export default function App() {
             transition={{ duration: 0.2 }}
             className={`max-w-7xl mx-auto ${view === 'schedule' ? 'h-full flex flex-col' : ''}`}
           >
-            {view === 'dashboard' && <DashboardView servers={servers} masses={masses} unassigned={unassignedServers} stats={serverStats} setView={setView} seedBase={seedBase} isSeeding={isSeeding} clearAllData={clearAllData} isDeleting={isDeleting} />}
+            {view === 'dashboard' && (
+              <DashboardView 
+                servers={servers} 
+                masses={masses} 
+                unassigned={unassignedServers} 
+                stats={serverStats} 
+                setView={setView} 
+                seedBase={seedBase} 
+                isSeeding={isSeeding} 
+                clearAllData={clearAllData} 
+                isDeleting={isDeleting}
+                isImportingDoc={isImportingDoc}
+                handleFileUpload={handleFileUpload}
+              />
+            )}
             {view === 'members' && <MembersView servers={servers} onAdd={addServer} onDelete={removeServer} stats={serverStats} />}
             {view === 'masses' && <MassesView masses={masses} onAdd={addMass} onDelete={removeMass} />}
             {view === 'schedule' && <ScheduleView masses={masses} servers={servers} onToggle={toggleAssignment} stats={serverStats} autoSchedule={autoSchedule} clearSchedule={clearSchedule} />}
@@ -1078,7 +1101,19 @@ function AuthView({
   );
 }
 
-function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, isSeeding, clearAllData, isDeleting }: any) {
+function DashboardView({ 
+  servers, 
+  masses, 
+  unassigned, 
+  stats, 
+  setView, 
+  seedBase, 
+  isSeeding, 
+  clearAllData, 
+  isDeleting,
+  isImportingDoc,
+  handleFileUpload
+}: any) {
   return (
     <div className="space-y-10">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
