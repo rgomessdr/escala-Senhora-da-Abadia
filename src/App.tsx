@@ -34,7 +34,9 @@ import {
   deleteDoc, 
   doc, 
   updateDoc,
-  getDocFromServer
+  getDocFromServer,
+  getDocs,
+  writeBatch
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { db, auth, loginWithEmail, registerWithEmail, signOut } from './lib/firebase';
@@ -189,7 +191,7 @@ export default function App() {
   // Seeding
   const seedBase = async () => {
     if (!user || isSeeding) return;
-    if (!window.confirm("Deseja importar a base de dados REAL da Paróquia (Abril 2026)? Isso registrará todos os servidores e a escala completa do mês.")) return;
+    if (!window.confirm("Deseja importar a base de dados REAL da Paróquia (Abril 2026)? Isso registrará todos os servidores e a escala completa do mês. Recomenda-se limpar os dados antigos se houver duplicidade.")) return;
 
     setIsSeeding(true);
     try {
@@ -221,22 +223,37 @@ export default function App() {
       ];
 
       const nameToId: Record<string, string> = {};
+      
+      // Map existing servers to avoid duplicates
+      servers.forEach(s => {
+        nameToId[s.name] = s.id;
+      });
 
-      // Create Servers and track IDs
-      for (const name of acolitosNames) {
-        const docRef = await addDoc(collection(db, 'servers'), { name, type: 'acolito', active: true, ownerId: user.uid });
-        nameToId[name] = docRef.id;
-      }
-      for (const name of coroinhasNames) {
-        const docRef = await addDoc(collection(db, 'servers'), { name, type: 'coroinha', active: true, ownerId: user.uid });
-        nameToId[name] = docRef.id;
-      }
+      // Create missing servers in parallel
+      const acolitoPromises = acolitosNames.filter(n => !nameToId[n]).map(async (name) => {
+        try {
+          const docRef = await addDoc(collection(db, 'servers'), { name, type: 'acolito', active: true, ownerId: user.uid });
+          nameToId[name] = docRef.id;
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'servers');
+        }
+      });
+
+      const coroinhaPromises = coroinhasNames.filter(n => !nameToId[n]).map(async (name) => {
+        try {
+          const docRef = await addDoc(collection(db, 'servers'), { name, type: 'coroinha', active: true, ownerId: user.uid });
+          nameToId[name] = docRef.id;
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'servers');
+        }
+      });
+
+      await Promise.all([...acolitoPromises, ...coroinhaPromises]);
 
       const getIds = (names: string[]) => names.map(n => nameToId[n]).filter(id => !!id);
 
       // --- APRIL 2026 REAL SCHEDULE ---
       const realMasses = [
-        // Domingo 05/04
         { title: "Missa de Domingo", date: "2026-04-05", time: "07:30", location: "Matriz", ac: ["Daniel Queiroz De Souza", "Andrey Henrique Gotttems Rossatte", "Pedro Lucas Souza Bael"], co: ["Bárbara Kaori Muta Lo", "Yasmin Padilha Da Silva", "Bruno Jose Marques Limberger (IR)", "Maria Fernanda Alban Menezes"] },
         { title: "Missa de Domingo", date: "2026-04-05", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Ezequiel Barbosa Velasco", "Mario Antonio Matiazi"], co: ["Micaella Saracho Targa (IR)", "Maria Alice Rossoni Macarini"] },
         { title: "Missa de Domingo", date: "2026-04-05", time: "09:00", location: "São José e São Bento", ac: ["Júlia Machado Stival", "Leonardo Gabriel Alonso Moreira"], co: ["Júlia Prates Gomes", "Elisa Patron Vicentin Moresco (IR)"] },
@@ -244,15 +261,11 @@ export default function App() {
         { title: "Missa de Domingo", date: "2026-04-05", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Lara Beatriz Neves Barbosa (IR)", "Luiz Otavio Pereira"], co: ["Luiz Otávio Straliotto Miotto (IR)", "Vitoria Camilo Rocha (IR)"] },
         { title: "Missa de Domingo", date: "2026-04-05", time: "19:00", location: "Matriz", ac: ["Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes", "Gabrielly Matos De Souza"], co: ["Ana Helena Menezes Ozorio", "Nicole Maria Silva Sá", "Laura Gimenes Knippelberg (IR)", "Antonella Oruê De Lima"] },
         { title: "Missa de Domingo", date: "2026-04-05", time: "19:00", location: "São José Operário", ac: ["Luiz Otavio Pereira", "Lucas Andreetta Ortega"], co: ["Cecilia Pereira Ferreira", "Maria Vitoria Bernardes Camara"] },
-
-        // Weekdays 07/04 - 11/04
         { title: "Missa/Terça", date: "2026-04-07", time: "19:00", location: "Caacupé", ac: ["Mario Antonio Matiazi"], co: ["Elisa Patron Vicentin Moresco (IR)", "Gabriel dos Santos Cunico (IR)"] },
         { title: "Missa/Quarta", date: "2026-04-08", time: "19:00", location: "Matriz", ac: ["Eric Padilha De Matos", "Pedro Lucas Souza Bael", "Sarah Souza De Oliveira"], co: ["Milena de Oliveira Souza", "Luiza Carraro Hernandes", "Maria Cecilia Perdomo Veronka", "Bruno Jose Marques Limberger (IR)"] },
         { title: "Missa/Quinta", date: "2026-04-09", time: "19:00", location: "São Vicente e São Benedito", ac: ["Daniel Queiroz De Souza"], co: ["Maria Cecilia Perdomo Veronka", "Maria Alice Rossoni Macarini"] },
         { title: "Missa/Sexta", date: "2026-04-10", time: "19:00", location: "Santa Luzia", ac: ["Eric Padilha De Matos", "Luiza Emanuelle De Siqueira Freitas", "Júlia Machado Stival"], co: ["Maria Vitória Lima Rossoni", "Ingrid Vitoria Rodrigues Dos Santos"] },
         { title: "Missa/Sábado", date: "2026-04-11", time: "19:00", location: "São Pedro e São Paulo", ac: ["Leonardo Gabriel Alonso Moreira", "Daniel Queiroz De Souza", "Lucas Andreetta Ortega"], co: ["Milena de Oliveira Souza", "Maria Alice Bogotoli"] },
-
-        // Domingo 12/04
         { title: "Missa de Domingo", date: "2026-04-12", time: "07:30", location: "Matriz", ac: ["Gabrielly Matos De Souza", "Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes"], co: ["Pedro Straliotto Silva", "Jordana Francener Colet", "Maria Vitória Lima Rossoni", "Maria Fernanda Moraes de Carvalho"] },
         { title: "Missa de Domingo", date: "2026-04-12", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara"], co: ["Pedro Henrique Lepri Ribeiro", "Maria Valentina Portes Dos Santos"] },
         { title: "Missa de Domingo", date: "2026-04-12", time: "09:00", location: "São José e São Bento", ac: ["Andrey Henrique Gotttems Rossatte", "Ezequiel Barbosa Velasco"], co: ["Júlia Rodrigues Arakaki (IR)", "Maria Alice Bogotoli"] },
@@ -260,19 +273,11 @@ export default function App() {
         { title: "Missa de Domingo", date: "2026-04-12", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Luiza Emanuelle De Siqueira Freitas", "Leonardo Gabriel Alonso Moreira"], co: ["Carolina Pasinatto Tonini", "Sofia Farias Bael"] },
         { title: "Missa de Domingo", date: "2026-04-12", time: "19:00", location: "Matriz", ac: ["Pedro Lucas Souza Bael", "Lucas Andreetta Ortega", "Luiz Otavio Pereira"], co: ["Cecilia Pereira Ferreira", "Arthur Henrique Mareco Grubert", "João Miguel Moraes De Araújo", "Ingrid Vitoria Rodrigues Dos Santos"] },
         { title: "Missa de Domingo", date: "2026-04-12", time: "19:00", location: "São José Operário", ac: ["Andrey Henrique Gotttems Rossatte", "Leonardo Alcântara"], co: ["Livia Camilo De Mendonça", "Alice Santolin Da Silva"] },
-
-        // Extra Weekday 14/04
         { title: "Missa/Terça", date: "2026-04-14", time: "19:00", location: "Bom Samaritano", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Ana Sofia Carriel Costa (IR)", "João Miguel Moraes De Araújo"] },
-
-        // Matriz 15/04 (Wednesday)
         { title: "Novena", date: "2026-04-15", time: "19:00", location: "Matriz", ac: ["Ezequiel Barbosa Velasco", "Leonardo Gabriel Alonso Moreira", "Júlia Machado Stival"], co: ["Ana Sofia Carriel Costa (IR)", "Alice Santolin Da Silva", "Vitoria Camilo Rocha (IR)", "Arthur Henrique Mareco Grubert"] },
-
-        // 16/04 - 18/04
         { title: "Quinta-Feira Santa", date: "2026-04-16", time: "19:00", location: "São Vicente e São Benedito", ac: ["Mario Antonio Matiazi"], co: ["Pedro Straliotto Silva", "Pedro Henrique Lepri Ribeiro"] },
         { title: "Sexta-Feira Santa", date: "2026-04-17", time: "19:00", location: "Santa Luzia", ac: ["Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara", "Sarah Souza De Oliveira"], co: ["Maria Valentina Portes Dos Santos", "Miguel Figueiredo Biazotto"] },
         { title: "Sábado de Aleluia", date: "2026-04-18", time: "19:00", location: "São Pedro e São Paulo", ac: ["Eric Padilha De Matos", "Luiza Emanuelle De Siqueira Freitas", "Luiz Otavio Pereira"], co: ["Livia Camilo De Mendonça", "Barbara Frota Da Silva"] },
-
-        // Domingo 19/04
         { title: "Missa de Páscoa", date: "2026-04-19", time: "07:30", location: "Matriz", ac: ["Pedro Lucas Souza Bael", "Mario Antonio Matiazi", "Júlia Machado Stival"], co: ["Antonio Carlos de Souza Alba (IR)", "Júlia Rodrigues Arakaki (IR)", "Maria Valentina Portes Dos Santos", "Ingrid Vitoria Rodrigues Dos Santos"] },
         { title: "Missa de Páscoa", date: "2026-04-19", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Ana Gabrielly Riquelme Fernandes", "Leonardo Gabriel Alonso Moreira"], co: ["Antonella Oruê De Lima", "Maria Vitoria Bernardes Camara"] },
         { title: "Missa de Páscoa", date: "2026-04-19", time: "09:00", location: "São José e São Bento", ac: ["Sarah Souza De Oliveira", "Daniel Queiroz De Souza"], co: ["Livia Camilo De Mendonça", "Maria Vitória Lima Rossoni"] },
@@ -280,15 +285,11 @@ export default function App() {
         { title: "Missa de Páscoa", date: "2026-04-19", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Lucas Andreetta Ortega", "Lara Beatriz Neves Barbosa (IR)"], co: ["Bruno Jose Marques Limberger (IR)", "Arthur Henrique Mareco Grubert"] },
         { title: "Missa de Páscoa", date: "2026-04-19", time: "19:00", location: "Matriz", ac: ["Leonardo Alcântara", "Andrey Henrique Gotttems Rossatte", "Eric Padilha De Matos"], co: ["Alice Santolin Da Silva", "Ana Helena Menezes Ozorio", "Yasmin Padilha Da Silva", "Sofia Farias Bael"] },
         { title: "Missa de Páscoa", date: "2026-04-19", time: "19:00", location: "São José Operário", ac: ["Luiz Otavio Pereira", "Ana Gabrielly Riquelme Fernandes"], co: ["Cecilia Pereira Ferreira", "Luiz Otávio Straliotto Miotto (IR)"] },
-
-        // Weekdays 21/04 - 25/04
         { title: "Missa/Terça", date: "2026-04-21", time: "19:00", location: "Caacupé", ac: ["Eric Padilha De Matos"], co: ["Pedro Straliotto Silva", "Laura Gimenes Knippelberg (IR)"] },
         { title: "Missa/Quarta", date: "2026-04-22", time: "19:00", location: "Matriz", ac: ["Ana Gabrielly Riquelme Fernandes", "Pedro Lucas Souza Bael", "Eric Padilha De Matos"], co: ["Gabriel dos Santos Cunico (IR)", "Ana Helena Menezes Ozorio", "Antonio Carlos de Souza Alba (IR)", "Júlia Rodrigues Arakaki (IR)"] },
         { title: "Missa/Quinta", date: "2026-04-23", time: "19:00", location: "São Vicente e São Benedito", ac: ["Luiz Otavio Pereira"], co: ["Miguel Figueiredo Biazotto", "Maria Cecilia Perdomo Veronka"] },
         { title: "Missa/Sexta", date: "2026-04-24", time: "19:00", location: "Santa Luzia", ac: ["Daniel Queiroz De Souza", "Lucas Andreetta Ortega", "Ezequiel Barbosa Velasco"], co: ["Micaella Saracho Targa (IR)", "Luiz Otávio Straliotto Miotto (IR)"] },
         { title: "Missa/Sábado", date: "2026-04-25", time: "19:00", location: "São Pedro e São Paulo", ac: ["Pedro Lucas Souza Bael", "Ana Gabrielly Riquelme Fernandes", "Leonardo Alcântara"], co: ["Jordana Francener Colet", "Maria Vitoria Bernardes Camara"] },
-
-        // Domingo 26/04
         { title: "Missa de Domingo", date: "2026-04-26", time: "07:30", location: "Matriz", ac: ["Leonardo Gabriel Alonso Moreira", "Sarah Souza De Oliveira", "Gabrielly Matos De Souza"], co: ["Milena de Oliveira Souza", "Miguel Figueiredo Biazotto", "João Miguel Moraes De Araújo", "Miguel Angelo Dias De Lima"] },
         { title: "Missa de Domingo", date: "2026-04-26", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Daniel Queiroz De Souza", "Luiza Emanuelle De Siqueira Freitas"], co: ["Vitoria Camilo Rocha (IR)", "Maria Alice Rossoni Macarini"] },
         { title: "Missa de Domingo", date: "2026-04-26", time: "09:00", location: "São José e São Bento", ac: ["Ezequiel Barbosa Velasco", "Mario Antonio Matiazi"], co: ["Bárbara Kaori Muta Lo", "Micaella Saracho Targa (IR)"] },
@@ -296,30 +297,42 @@ export default function App() {
         { title: "Missa de Domingo", date: "2026-04-26", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Leonardo Alcântara", "Ana Gabrielly Riquelme Fernandes"], co: ["Carolina Pasinatto Tonini", "Lucas Borgert Oliveira (IR)"] },
         { title: "Missa de Domingo", date: "2026-04-26", time: "19:00", location: "Matriz", ac: ["Lara Beatriz Neves Barbosa (IR)", "Lucas Andreetta Ortega", "Luiz Otavio Pereira"], co: ["Antonio Carlos de Souza Alba (IR)", "Maria Fernanda Alban Menezes", "Marina Tavares Moreira", "Jordana Francener Colet"] },
         { title: "Missa de Domingo", date: "2026-04-26", time: "19:00", location: "São José Operário", ac: ["Andrey Henrique Gotttems Rossatte", "Ezequiel Barbosa Velasco"], co: ["Cecilia Pereira Ferreira", "Barbara Frota Da Silva"] },
-
-        // Weekdays 28/04 - 30/04
         { title: "Missa/Terça", date: "2026-04-28", time: "19:00", location: "Bom Samaritano", ac: ["Luiza Emanuelle De Siqueira Freitas"], co: ["Yasmin Padilha Da Silva", "Miguel Angelo Dias De Lima"] },
         { title: "Missa/Quarta", date: "2026-04-29", time: "19:00", location: "Matriz", ac: ["Mario Antonio Matiazi", "Sarah Souza De Oliveira", "Júlia Machado Stival"], co: ["Cecilia Pereira Ferreira", "Antonella Oruê De Lima", "Marina Tavares Moreira", "Sofia Farias Bael"] },
         { title: "Missa/Quinta", date: "2026-04-30", time: "19:00", location: "São Vicente e São Benedito", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Lucas Borgert Oliveira (IR)", "Maria Fernanda Alban Menezes"] },
       ];
 
-      for (const mass of realMasses) {
-        await addDoc(collection(db, 'masses'), {
-          title: mass.title,
-          date: mass.date,
-          time: mass.time,
-          location: mass.location,
-          assignments: {
-            acolitos: getIds(mass.ac),
-            coroinhas: getIds(mass.co)
-          },
-          ownerId: user.uid
-        });
-      }
+      // Add/Update masses in parallel
+      const massPromises = realMasses.map(async (mass) => {
+        try {
+          const massData = {
+            title: mass.title,
+            date: mass.date,
+            time: mass.time,
+            location: mass.location,
+            assignments: {
+              acolitos: getIds(mass.ac),
+              coroinhas: getIds(mass.co)
+            },
+            ownerId: user.uid
+          };
+          
+          const existingMass = masses.find(m => m.date === mass.date && m.time === mass.time && m.location === mass.location);
+          if (existingMass) {
+            await updateDoc(doc(db, 'masses', existingMass.id), massData);
+          } else {
+            await addDoc(collection(db, 'masses'), massData);
+          }
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, 'masses');
+        }
+      });
 
-      // --- MAY 2026 TEMPLATES (Empty assignments for future scaling) ---
+      await Promise.all(massPromises);
+
+      // --- MAY 2026 TEMPLATES ---
       const mayDates = ["2026-05-03", "2026-05-10", "2026-05-17", "2026-05-24", "2026-05-31"];
-      for (const d of mayDates) {
+      const mayPromises = mayDates.flatMap(d => {
         const isMothersDay = d === "2026-05-10";
         const isPentecost = d === "2026-05-24";
         
@@ -333,10 +346,19 @@ export default function App() {
           { title: "Missa de Domingo", time: "19:00", location: "São José Operário" },
         ];
         
-        for (const template of massTemplates) {
-          await addDoc(collection(db, 'masses'), { ...template, date: d, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
-        }
-      }
+        return massTemplates.map(async (template) => {
+          try {
+            const exists = masses.find(m => m.date === d && m.time === template.time && m.location === template.location);
+            if (!exists) {
+              await addDoc(collection(db, 'masses'), { ...template, date: d, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
+            }
+          } catch (e) {
+            handleFirestoreError(e, OperationType.CREATE, 'masses');
+          }
+        });
+      });
+
+      await Promise.all(mayPromises);
       
       alert("Base de dados REAL de Abril 2026 importada com sucesso!");
     } catch (err) {
@@ -344,6 +366,34 @@ export default function App() {
       alert("Houve um erro ao importar a base. Verifique sua conexão.");
     } finally {
       setIsSeeding(false);
+    }
+  };
+
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const clearAllData = async () => {
+    if (!user || isDeleting) return;
+    if (!window.confirm("ATENÇÃO: Isso apagará TODOS os servidores e missas cadastrados. Deseja continuar?")) return;
+    
+    setIsDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      
+      // Delete all servers for this owner
+      const serverSnap = await getDocs(query(collection(db, 'servers'), where('ownerId', '==', user.uid)));
+      serverSnap.docs.forEach(d => batch.delete(d.ref));
+      
+      // Delete all masses for this owner
+      const massSnap = await getDocs(query(collection(db, 'masses'), where('ownerId', '==', user.uid)));
+      massSnap.docs.forEach(d => batch.delete(d.ref));
+      
+      await batch.commit();
+      alert("Todos os dados foram excluídos com sucesso.");
+    } catch (err) {
+      console.error("Erro ao excluir dados:", err);
+      alert("Erro ao excluir dados. Verifique sua conexão.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -680,7 +730,7 @@ export default function App() {
             transition={{ duration: 0.2 }}
             className={`max-w-7xl mx-auto ${view === 'schedule' ? 'h-full flex flex-col' : ''}`}
           >
-            {view === 'dashboard' && <DashboardView servers={servers} masses={masses} unassigned={unassignedServers} stats={serverStats} setView={setView} seedBase={seedBase} isSeeding={isSeeding} />}
+            {view === 'dashboard' && <DashboardView servers={servers} masses={masses} unassigned={unassignedServers} stats={serverStats} setView={setView} seedBase={seedBase} isSeeding={isSeeding} clearAllData={clearAllData} isDeleting={isDeleting} />}
             {view === 'members' && <MembersView servers={servers} onAdd={addServer} onDelete={removeServer} stats={serverStats} />}
             {view === 'masses' && <MassesView masses={masses} onAdd={addMass} onDelete={removeMass} />}
             {view === 'schedule' && <ScheduleView masses={masses} servers={servers} onToggle={toggleAssignment} stats={serverStats} autoSchedule={autoSchedule} clearSchedule={clearSchedule} />}
@@ -865,7 +915,7 @@ function AuthView({
   );
 }
 
-function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, isSeeding }: any) {
+function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, isSeeding, clearAllData, isDeleting }: any) {
   return (
     <div className="space-y-10">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -875,12 +925,20 @@ function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, 
         </div>
           <div className="flex gap-3">
             <button 
-              onClick={seedBase}
-              disabled={isSeeding}
-              className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-wait"
+              onClick={clearAllData}
+              disabled={isDeleting || isSeeding}
+              className="flex items-center gap-2 px-5 py-3 bg-white border border-rose-200 text-rose-500 rounded-xl text-sm font-bold hover:bg-rose-50 transition-all disabled:opacity-50"
             >
-               {isSeeding ? <Loader2 className="animate-spin" size={18} /> : null}
-               {isSeeding ? 'Importando...' : 'Importar Base'}
+               {isDeleting ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
+               {isDeleting ? 'Excluindo...' : 'Limpar Dados'}
+            </button>
+            <button 
+              onClick={seedBase}
+              disabled={isSeeding || isDeleting}
+              className="flex items-center gap-2 px-5 py-3 bg-white border border-indigo-200 text-indigo-600 rounded-xl text-sm font-bold hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-wait"
+            >
+               {isSeeding ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
+               {isSeeding ? 'Importando...' : 'Importar Dados Reais (Abril)'}
             </button>
             <button onClick={() => setView('schedule')} className="group flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
               <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> Montar Nova Escala
