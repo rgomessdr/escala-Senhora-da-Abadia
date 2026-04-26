@@ -8,22 +8,29 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('eyJ') || supabaseAnonKey.length < 20) {
   console.error(
     "⚠️ CONFIGURAÇÃO INCORRETA NO PAINEL SECRETS!\n\n" +
-    "Você deve configurar EXATAMENTE assim:\n" +
-    "1. Clique no ícone de Engrenagem (Settings) -> Secrets\n" +
-    "2. No campo NOME: VITE_SUPABASE_URL\n" +
-    "   No campo VALOR: pgfjgvtzvwtrlhhvcomg\n" +
-    "3. Clique em 'Adicionar segredo'\n" +
-    "4. No campo NOME: VITE_SUPABASE_ANON_KEY\n" +
-    "   No campo VALOR: (sua chave que começa com sb_publishable_...)\n" +
-    "5. CLIQUE EM 'APLICAR ALTERAÇÕES' no final do painel."
+    "Acesse: Engrenagem (Settings) -> Secrets\n" +
+    "Configure estas 2 chaves exatamente:\n\n" +
+    "1. Nome: VITE_SUPABASE_URL\n" +
+    "   Valor: (O seu 'Project URL' do Supabase, ex: https://xyz.supabase.co)\n\n" +
+    "2. Nome: VITE_SUPABASE_ANON_KEY\n" +
+    "   Valor: (O seu 'anon public' key)\n\n" +
+    "💡 DICA: No Supabase, vá em Settings -> API para encontrar esses valores.\n" +
+    "Não esqueça de clicar em 'APLICAR ALTERAÇÕES' no final do painel de segredos."
   );
 }
 
-const finalUrl = supabaseUrl.includes('.') 
-  ? (supabaseUrl.startsWith('http') ? supabaseUrl : `https://${supabaseUrl}`)
-  : (supabaseUrl ? `https://${supabaseUrl}.supabase.co` : 'https://placeholder-project.supabase.co');
+// Support for providing just the project ID or full URLs
+const cleanUrl = supabaseUrl?.trim()
+  .replace(/\/rest\/v1\/?$/, '') // Remove suffix if present
+  .replace(/\/$/, ''); // Remove trailing slash
 
-export const supabase = createClient(finalUrl, supabaseAnonKey || 'placeholder-key');
+const finalUrl = cleanUrl.includes('.') 
+  ? (cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`)
+  : (cleanUrl ? `https://${cleanUrl}.supabase.co` : 'https://placeholder-project.supabase.co');
+
+console.log("🔌 Supabase Initializing with URL:", finalUrl);
+
+export const supabase = createClient(finalUrl, supabaseAnonKey?.trim() || 'placeholder-key');
 
 export const checkSupabaseConnection = async () => {
   if (!supabaseUrl || !supabaseAnonKey) {
