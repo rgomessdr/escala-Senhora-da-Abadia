@@ -5,6 +5,9 @@ export interface Server {
   name: string;
   type: ServerRole;
   active: boolean;
+  email?: string;
+  whatsapp?: string;
+  birthDate?: string;
   ownerId: string;
 }
 

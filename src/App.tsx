@@ -22,15 +22,13 @@ import {
   Download,
   MoreVertical,
   Layers,
-  Share2
+  Share2,
+  Phone,
+  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import * as pdfjsLib from 'pdfjs-dist';
-import { GoogleGenAI, Type } from "@google/genai";
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs`;
 import { Server, Mass, View, ServerRole } from './types';
 import { User } from '@supabase/supabase-js';
 
@@ -138,6 +136,9 @@ export default function App() {
         name: s.name,
         type: s.type,
         active: s.active,
+        email: s.email,
+        whatsapp: s.whatsapp,
+        birthDate: s.birth_date,
         ownerId: s.owner_id
       })));
 
@@ -195,358 +196,9 @@ export default function App() {
     return servers.filter(s => serverStats[s.id] === 0);
   }, [servers, serverStats]);
 
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [isImportingDoc, setIsImportingDoc] = useState(false);
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !user) return;
-
-    setIsImportingDoc(true);
-    try {
-      let textContent = "";
-
-      if (file.type === 'application/pdf') {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          const strings = content.items.map((item: any) => item.str);
-          textContent += strings.join(" ") + "\n";
-        }
-      } else {
-        textContent = await file.text();
-      }
-
-      if (!textContent.trim()) {
-        throw new Error("Não foi possível extrair texto do documento.");
-      }
-
-      // 🔑 Call Gemini to parse
-      const apiKey = process.env.GEMINI_API_KEY;
-      
-      if (!apiKey || apiKey === 'undefined' || apiKey === '') {
-        throw new Error("Chave do Gemini (GEMINI_API_KEY) não encontrada. Certifique-se de que a variável de ambiente está configurada.");
-      }
-      
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const prompt = `Analise este texto de uma escala paroquial e extraia os dados estruturados.
-      Regras: 1. Nomes devem ser limpos (Remover cargos). 2. Datas devem estar no formato YYYY-MM-DD. 3. Se não houver ano no texto, assuma 2026. 4. Identifique o Local da missa (ex: Matriz, Comunidade X).
-      
-      Extraia:
-      1. Lista de servidores: { "name": "NOME", "type": "acolito" ou "coroinha" }
-      2. Lista de missas: { "title": "TÍTULO", "date": "YYYY-MM-DD", "time": "HH:MM", "location": "LOCAL", "acolitos": ["NOME1", "NOME2"], "coroinhas": ["NOME1"] }
-      
-      Importante: Retorne APENAS o JSON.
-      
-      Texto extraído:
-      """
-      ${textContent}
-      """`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          systemInstruction: "Você é um assistente de gestão paroquial especializado em ler escalas de missa. Retorne apenas JSON puro.",
-          responseMimeType: "application/json"
-        }
-      });
-      
-      const cleanJson = response.text?.trim() || '{}';
-      const data = JSON.parse(cleanJson);
-      if (!data.servers || !data.masses) throw new Error("A IA não conseguiu identificar os dados corretamente.");
-
-      // --- Sync with Database ---
-      const nameToId: Record<string, string> = {};
-      servers.forEach(s => {
-        if (s.name) {
-          nameToId[s.name.trim().toLowerCase()] = s.id;
-        }
-      });
-
-      // 1. Insert missing servers
-      const safeTrim = (n: any) => (typeof n === 'string' ? n.trim() : '');
-      
-      const newServersFromAI = (data.servers || []).filter((s: any) => {
-        const name = safeTrim(s?.name);
-        return name.length > 0 && !nameToId[name.toLowerCase()];
-      });
-
-      if (newServersFromAI.length > 0) {
-        // Ensure uniqueness for this chunk
-        const uniqueToInsertMap = new Map();
-        newServersFromAI.forEach((s: any) => {
-          const name = safeTrim(s.name);
-          const lowerName = name.toLowerCase();
-          if (!uniqueToInsertMap.has(lowerName)) {
-            uniqueToInsertMap.set(lowerName, {
-              name: name,
-              type: s.type === 'acolito' ? 'acolito' : 'coroinha',
-              active: true,
-              owner_id: user.id
-            });
-          }
-        });
-
-        const finalServersToInsert = Array.from(uniqueToInsertMap.values());
-        
-        const { data: insertedServers, error: sError } = await sdb.servers.insert(finalServersToInsert);
-        if (sError) {
-          console.error("Erro ao inserir servidores (Import Doc):", sError);
-          throw sError;
-        }
-        
-        insertedServers?.forEach(s => {
-          if (s.name) {
-            nameToId[s.name.trim().toLowerCase()] = s.id;
-          }
-        });
-      }
-
-      // 2. Insert masses
-      const massesToInsert = data.masses.map((m: any) => ({
-        title: m.title,
-        date: m.date,
-        time: m.time,
-        location: m.location,
-        assignments: {
-          acolitos: m.acolitos.map((name: string) => nameToId[name.trim().toLowerCase()]).filter(Boolean),
-          coroinhas: m.coroinhas.map((name: string) => nameToId[name.trim().toLowerCase()]).filter(Boolean)
-        },
-        ownerId: user.id
-      }));
-
-      if (massesToInsert.length > 0) {
-        const { error: mError } = await sdb.masses.insert(massesToInsert);
-        if (mError) throw mError;
-      }
-
-      alert(`Sucesso! Importados ${data.servers.length} servidores e ${data.masses.length} missas.`);
-      fetchData();
-
-    } catch (err: any) {
-      console.error("Erro no processamento:", err);
-      alert("Erro ao ler documento: " + err.message);
-    } finally {
-      setIsImportingDoc(false);
-      event.target.value = '';
-    }
-  };
-
-  // Seeding
-  const seedBase = async () => {
-    if (!user || isSeeding) return;
-    if (!window.confirm("Deseja importar a base de dados REAL da Paróquia (Abril 2026)? Isso registrará todos os servidores e a escala completa do mês. Recomenda-se limpar os dados antigos se houver duplicidade.")) return;
-
-    setIsSeeding(true);
-    try {
-      const acolitosNames = [
-        "Daniel Queiroz De Souza", "Andrey Henrique Gotttems Rossatte", "Pedro Lucas Souza Bael",
-        "Ezequiel Barbosa Velasco", "Mario Antonio Matiazi", "Júlia Machado Stival",
-        "Leonardo Gabriel Alonso Moreira", "Lucas Andreetta Ortega", "Luiza Emanuelle De Siqueira Freitas",
-        "Leonardo Alcântara", "Lara Beatriz Neves Barbosa (IR)", "Luiz Otavio Pereira",
-        "Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes", "Gabrielly Matos De Souza",
-        "Eric Padilha De Matos"
-      ];
-
-      const coroinhasNames = [
-        "Bárbara Kaori Muta Lo", "Yasmin Padilha Da Silva", "Bruno Jose Marques Limberger (IR)",
-        "Maria Fernanda Alban Menezes", "Micaella Saracho Targa (IR)", "Maria Alice Rossoni Macarini",
-        "Júlia Prates Gomes", "Elisa Patron Vicentin Moresco (IR)", "Ana Sofia Carriel Costa (IR)",
-        "Carolina Pasinatto Tonini", "Beatriz Barbier de Oliveira (IR)", "Marina Tavares Moreira",
-        "Luiz Otávio Straliotto Miotto (IR)", "Vitoria Camilo Rocha (IR)", "Ana Helena Menezes Ozorio",
-        "Nicole Maria Silva Sá", "Laura Gimenes Knippelberg (IR)", "Antonella Oruê De Lima",
-        "Cecilia Pereira Ferreira", "Maria Vitoria Bernardes Camara", "Gabriel dos Santos Cunico (IR)",
-        "Milena de Oliveira Souza", "Luiza Carraro Hernandes", "Maria Cecilia Perdomo Veronka",
-        "Ingrid Vitoria Rodrigues Dos Santos", "Maria Vitória Lima Rossoni", "Maria Alice Bogotoli",
-        "Pedro Straliotto Silva", "Jordana Francener Colet", "Maria Fernanda Moraes de Carvalho",
-        "Pedro Henrique Lepri Ribeiro", "Maria Valentina Portes Dos Santos", "Júlia Rodrigues Arakaki (IR)",
-        "Barbara Frota Da Silva", "Renata Valentina Izolan Coldebella", "Miguel Angelo Dias De Lima",
-        "Sofia Farias Bael", "Arthur Henrique Mareco Grubert", "João Miguel Moraes De Araújo",
-        "Livia Camilo De Mendonça", "Alice Santolin Da Silva", "Miguel Figueiredo Biazotto",
-        "Antonio Carlos de Souza Alba (IR)", "Lucas Borgert Oliveira (IR)"
-      ];
-
-      const nameToId: Record<string, string> = {};
-      
-      // Step 1: Identify existing servers
-      servers.forEach(s => {
-        nameToId[s.name.trim()] = s.id;
-      });
-
-      // Step 2: Prepare and insert missing servers
-      const safeTrim = (n: any) => (typeof n === 'string' ? n.trim() : '');
-      
-      // Use Set to ensure uniqueness in the current run (case-insensitive for check)
-      const uniqueNewNames = new Set<string>();
-
-      const missingAcolitos = acolitosNames
-        .map(safeTrim)
-        .filter(n => n.length > 0 && !nameToId[n])
-        .filter(n => {
-          const lower = n.toLowerCase();
-          if (uniqueNewNames.has(lower)) return false;
-          uniqueNewNames.add(lower);
-          return true;
-        });
-        
-      const missingCoroinhas = coroinhasNames
-        .map(safeTrim)
-        .filter(n => n.length > 0 && !nameToId[n])
-        .filter(n => {
-          const lower = n.toLowerCase();
-          if (uniqueNewNames.has(lower)) return false;
-          uniqueNewNames.add(lower);
-          return true;
-        });
-
-      if (missingAcolitos.length > 0 || missingCoroinhas.length > 0) {
-        const serversToInsert = [
-          ...missingAcolitos.map(n => ({ name: n, type: 'acolito', active: true, owner_id: user.id })),
-          ...missingCoroinhas.map(n => ({ name: n, type: 'coroinha', active: true, owner_id: user.id }))
-        ];
-        
-        console.log("Inserindo novos servidores:", serversToInsert);
-        
-        // Filter out any potential invalid objects just in case
-        const validServersToInsert = serversToInsert.filter(s => s.name && s.name.length > 0);
-        
-        if (validServersToInsert.length > 0) {
-          const { data: insertedData, error } = await sdb.servers.insert(validServersToInsert);
-          if (error) {
-            console.error("Erro detalhado na inserção de servidores:", error);
-            throw error;
-          }
-          
-          insertedData?.forEach(s => {
-            if (s.name) {
-              nameToId[s.name.trim()] = s.id;
-            }
-          });
-        }
-      }
-
-      const getIds = (names: string[]) => names.map(n => nameToId[n.trim()]).filter(id => !!id);
-
-      // --- APRIL 2026 REAL SCHEDULE ---
-      const realMasses = [
-        // Page 1
-        { title: "Missa de Domingo", date: "2026-04-05", time: "07:30", location: "Matriz", ac: ["Daniel Queiroz De Souza", "Andrey Henrique Gotttems Rossatte", "Pedro Lucas Souza Bael"], co: ["Bárbara Kaori Muta Lo", "Yasmin Padilha Da Silva", "Bruno Jose Marques Limberger (IR)", "Maria Fernanda Alban Menezes"] },
-        { title: "Missa de Domingo", date: "2026-04-05", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Ezequiel Barbosa Velasco", "Mario Antonio Matiazi"], co: ["Micaella Saracho Targa (IR)", "Maria Alice Rossoni Macarini"] },
-        { title: "Missa de Domingo", date: "2026-04-05", time: "09:00", location: "São José e São Bento", ac: ["Júlia Machado Stival", "Leonardo Gabriel Alonso Moreira"], co: ["Júlia Prates Gomes", "Elisa Patron Vicentin Moresco (IR)"] },
-        { title: "Missa de Domingo", date: "2026-04-05", time: "10:00", location: "Matriz", ac: ["Lucas Andreetta Ortega", "Luiza Emanuelle De Siqueira Freitas", "Leonardo Alcântara"], co: ["Ana Sofia Carriel Costa (IR)", "Carolina Pasinatto Tonini", "Beatriz Barbier de Oliveira (IR)", "Marina Tavares Moreira"] },
-        { title: "Missa de Domingo", date: "2026-04-05", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Lara Beatriz Neves Barbosa (IR)", "Luiz Otavio Pereira"], co: ["Luiz Otávio Straliotto Miotto (IR)", "Vitoria Camilo Rocha (IR)"] },
-        { title: "Missa de Domingo", date: "2026-04-05", time: "19:00", location: "Matriz", ac: ["Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes", "Gabrielly Matos De Souza"], co: ["Ana Helena Menezes Ozorio", "Nicole Maria Silva Sá", "Laura Gimenes Knippelberg (IR)", "Antonella Oruê De Lima"] },
-        { title: "Missa de Domingo", date: "2026-04-05", time: "19:00", location: "São José Operário", ac: ["Luiz Otavio Pereira", "Lucas Andreetta Ortega"], co: ["Cecilia Pereira Ferreira", "Maria Vitoria Bernardes Camara"] },
-        
-        // Page 2
-        { title: "Missa/Terça", date: "2026-04-07", time: "19:00", location: "Caacupé", ac: ["Mario Antonio Matiazi"], co: ["Elisa Patron Vicentin Moresco (IR)", "Gabriel dos Santos Cunico (IR)"] },
-        { title: "Missa/Quarta", date: "2026-04-08", time: "19:00", location: "Matriz", ac: ["Eric Padilha De Matos", "Pedro Lucas Souza Bael", "Sarah Souza De Oliveira"], co: ["Milena de Oliveira Souza", "Luiza Carraro Hernandes", "Maria Cecilia Perdomo Veronka", "Bruno Jose Marques Limberger (IR)"] },
-        { title: "Missa/Quinta", date: "2026-04-09", time: "19:00", location: "São Vicente e São Benedito", ac: ["Daniel Queiroz De Souza"], co: ["Maria Cecilia Perdomo Veronka", "Maria Alice Rossoni Macarini"] },
-        { title: "Missa/Sexta", date: "2026-04-10", time: "19:00", location: "Santa Luzia", ac: ["Eric Padilha De Matos", "Luiza Emanuelle De Siqueira Freitas", "Júlia Machado Stival"], co: ["Maria Vitória Lima Rossoni", "Ingrid Vitoria Rodrigues Dos Santos"] },
-        { title: "Missa/Sábado", date: "2026-04-11", time: "19:00", location: "São Pedro e São Paulo", ac: ["Leonardo Gabriel Alonso Moreira", "Daniel Queiroz De Souza", "Lucas Andreetta Ortega"], co: ["Milena de Oliveira Souza", "Maria Alice Bogotoli"] },
-        { title: "Missa de Domingo", date: "2026-04-12", time: "07:30", location: "Matriz", ac: ["Gabrielly Matos De Souza", "Sarah Souza De Oliveira", "Ana Gabrielly Riquelme Fernandes"], co: ["Pedro Straliotto Silva", "Jordana Francener Colet", "Maria Vitória Lima Rossoni", "Maria Fernanda Moraes de Carvalho"] },
-
-        // Page 3
-        { title: "Missa de Domingo", date: "2026-04-12", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara"], co: ["Pedro Henrique Lepri Ribeiro", "Maria Valentina Portes Dos Santos"] },
-        { title: "Missa de Domingo", date: "2026-04-12", time: "09:00", location: "São José e São Bento", ac: ["Andrey Henrique Gotttems Rossatte", "Ezequiel Barbosa Velasco"], co: ["Júlia Rodrigues Arakaki (IR)", "Maria Alice Bogotoli"] },
-        { title: "Missa de Domingo", date: "2026-04-12", time: "10:00", location: "Matriz", ac: ["Daniel Queiroz De Souza", "Mario Antonio Matiazi", "Júlia Machado Stival"], co: ["Bárbara Kaori Muta Lo", "Barbara Frota Da Silva", "Renata Valentina Izolan Coldebella", "Miguel Angelo Dias De Lima"] },
-        { title: "Missa de Domingo", date: "2026-04-12", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Luiza Emanuelle De Siqueira Freitas", "Leonardo Gabriel Alonso Moreira"], co: ["Carolina Pasinatto Tonini", "Sofia Farias Bael"] },
-        { title: "Missa de Domingo", date: "2026-04-12", time: "19:00", location: "Matriz", ac: ["Pedro Lucas Souza Bael", "Lucas Andreetta Ortega", "Luiz Otavio Pereira"], co: ["Cecilia Pereira Ferreira", "Arthur Henrique Mareco Grubert", "João Miguel Moraes De Araújo", "Ingrid Vitoria Rodrigues Dos Santos"] },
-        { title: "Missa de Domingo", date: "2026-04-12", time: "19:00", location: "São José Operário", ac: ["Andrey Henrique Gotttems Rossatte", "Leonardo Alcântara"], co: ["Livia Camilo De Mendonça", "Alice Santolin Da Silva"] },
-        { title: "Missa/Terça", date: "2026-04-14", time: "19:00", location: "Bom Samaritano", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Ana Sofia Carriel Costa (IR)", "João Miguel Moraes De Araújo"] },
-
-        // Page 4
-        { title: "Novena/Quarta", date: "2026-04-15", time: "19:00", location: "Matriz", ac: ["Ezequiel Barbosa Velasco", "Leonardo Gabriel Alonso Moreira", "Júlia Machado Stival"], co: ["Ana Sofia Carriel Costa (IR)", "Alice Santolin Da Silva", "Vitoria Camilo Rocha (IR)", "Arthur Henrique Mareco Grubert"] },
-        { title: "Missa/Quinta", date: "2026-04-16", time: "19:00", location: "São Vicente e São Benedito", ac: ["Mario Antonio Matiazi"], co: ["Pedro Straliotto Silva", "Pedro Henrique Lepri Ribeiro"] },
-        { title: "Celebração/Sexta", date: "2026-04-17", time: "19:00", location: "Santa Luzia", ac: ["Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara", "Sarah Souza De Oliveira"], co: ["Maria Valentina Portes Dos Santos", "Miguel Figueiredo Biazotto"] },
-        { title: "Missa/Sábado", date: "2026-04-18", time: "19:00", location: "São Pedro e São Paulo", ac: ["Eric Padilha De Matos", "Luiza Emanuelle De Siqueira Freitas", "Luiz Otavio Pereira"], co: ["Livia Camilo De Mendonça", "Barbara Frota Da Silva"] },
-        { title: "Missa de Domingo", date: "2026-04-19", time: "07:30", location: "Matriz", ac: ["Pedro Lucas Souza Bael", "Mario Antonio Matiazi", "Júlia Machado Stival"], co: ["Antonio Carlos de Souza Alba (IR)", "Júlia Rodrigues Arakaki (IR)", "Maria Valentina Portes Dos Santos", "Ingrid Vitoria Rodrigues Dos Santos"] },
-        { title: "Missa de Domingo", date: "2026-04-19", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Ana Gabrielly Riquelme Fernandes", "Leonardo Gabriel Alonso Moreira"], co: ["Antonella Oruê De Lima", "Maria Vitoria Bernardes Camara"] },
-
-        // Page 5
-        { title: "Missa de Domingo", date: "2026-04-19", time: "09:00", location: "São José e São Bento", ac: ["Sarah Souza De Oliveira", "Daniel Queiroz De Souza"], co: ["Livia Camilo De Mendonça", "Maria Vitória Lima Rossoni"] },
-        { title: "Missa de Domingo", date: "2026-04-19", time: "10:00", location: "Matriz", ac: ["Ezequiel Barbosa Velasco", "Luiza Emanuelle De Siqueira Freitas", "Gabrielly Matos De Souza"], co: ["Carolina Pasinatto Tonini", "Lucas Borgert Oliveira (IR)", "Júlia Prates Gomes", "Maria Alice Bogotoli"] },
-        { title: "Missa de Domingo", date: "2026-04-19", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Lucas Andreetta Ortega", "Lara Beatriz Neves Barbosa (IR)"], co: ["Bruno Jose Marques Limberger (IR)", "Arthur Henrique Mareco Grubert"] },
-        { title: "Missa de Domingo", date: "2026-04-19", time: "19:00", location: "Matriz", ac: ["Leonardo Alcântara", "Andrey Henrique Gotttems Rossatte", "Eric Padilha De Matos"], co: ["Alice Santolin Da Silva", "Ana Helena Menezes Ozorio", "Yasmin Padilha Da Silva", "Sofia Farias Bael"] },
-        { title: "Missa de Domingo", date: "2026-04-19", time: "19:00", location: "São José Operário", ac: ["Luiz Otavio Pereira", "Ana Gabrielly Riquelme Fernandes"], co: ["Cecilia Pereira Ferreira", "Luiz Otávio Straliotto Miotto (IR)"] },
-        { title: "Missa/Terça", date: "2026-04-21", time: "19:00", location: "Caacupé", ac: ["Eric Padilha De Matos"], co: ["Pedro Straliotto Silva", "Laura Gimenes Knippelberg (IR)"] },
-        { title: "Missa/Quarta", date: "2026-04-22", time: "19:00", location: "Matriz", ac: ["Ana Gabrielly Riquelme Fernandes", "Pedro Lucas Souza Bael", "Eric Padilha De Matos"], co: ["Gabriel dos Santos Cunico (IR)", "Ana Helena Menezes Ozorio", "Antonio Carlos de Souza Alba (IR)", "Júlia Rodrigues Arakaki (IR)"] },
-
-        // Page 6
-        { title: "Missa/Quinta", date: "2026-04-23", time: "19:00", location: "São Vicente e São Benedito", ac: ["Luiz Otavio Pereira"], co: ["Miguel Figueiredo Biazotto", "Maria Cecilia Perdomo Veronka"] },
-        { title: "Missa/Sexta", date: "2026-04-24", time: "19:00", location: "Santa Luzia", ac: ["Daniel Queiroz De Souza", "Lucas Andreetta Ortega", "Ezequiel Barbosa Velasco"], co: ["Micaella Saracho Targa (IR)", "Luiz Otávio Straliotto Miotto (IR)"] },
-        { title: "Missa/Sábado", date: "2026-04-25", time: "19:00", location: "São Pedro e São Paulo", ac: ["Pedro Lucas Souza Bael", "Ana Gabrielly Riquelme Fernandes", "Leonardo Alcântara"], co: ["Jordana Francener Colet", "Maria Vitoria Bernardes Camara"] },
-        { title: "Missa de Domingo", date: "2026-04-26", time: "07:30", location: "Matriz", ac: ["Leonardo Gabriel Alonso Moreira", "Sarah Souza De Oliveira", "Gabrielly Matos De Souza"], co: ["Milena de Oliveira Souza", "Miguel Figueiredo Biazotto", "João Miguel Moraes De Araújo", "Miguel Angelo Dias De Lima"] },
-        { title: "Missa de Domingo", date: "2026-04-26", time: "08:00", location: "Nossa Senhora Das Graças", ac: ["Daniel Queiroz De Souza", "Luiza Emanuelle De Siqueira Freitas"], co: ["Vitoria Camilo Rocha (IR)", "Maria Alice Rossoni Macarini"] },
-        { title: "Missa de Domingo", date: "2026-04-26", time: "09:00", location: "São José e São Bento", ac: ["Ezequiel Barbosa Velasco", "Mario Antonio Matiazi"], co: ["Bárbara Kaori Muta Lo", "Micaella Saracho Targa (IR)"] },
-
-        // Page 7
-        { title: "Missa de Domingo", date: "2026-04-26", time: "10:00", location: "Matriz", ac: ["Eric Padilha De Matos", "Júlia Machado Stival", "Pedro Lucas Souza Bael"], co: ["Gabriel dos Santos Cunico (IR)", "Beatriz Barbier de Oliveira (IR)", "Pedro Henrique Lepri Ribeiro", "Laura Gimenes Knippelberg (IR)"] },
-        { title: "Missa de Domingo", date: "2026-04-26", time: "17:00", location: "Nossa Senhora Aparecida", ac: ["Leonardo Alcântara", "Ana Gabrielly Riquelme Fernandes"], co: ["Carolina Pasinatto Tonini", "Lucas Borgert Oliveira (IR)"] },
-        { title: "Missa de Domingo", date: "2026-04-26", time: "19:00", location: "Matriz", ac: ["Lara Beatriz Neves Barbosa (IR)", "Lucas Andreetta Ortega", "Luiz Otavio Pereira"], co: ["Antonio Carlos de Souza Alba (IR)", "Maria Fernanda Alban Menezes", "Marina Tavares Moreira", "Jordana Francener Colet"] },
-        { title: "Missa de Domingo", date: "2026-04-26", time: "19:00", location: "São José Operário", ac: ["Andrey Henrique Gotttems Rossatte", "Ezequiel Barbosa Velasco"], co: ["Cecilia Pereira Ferreira", "Barbara Frota Da Silva"] },
-        { title: "Missa/Terça", date: "2026-04-28", time: "19:00", location: "Bom Samaritano", ac: ["Luiza Emanuelle De Siqueira Freitas"], co: ["Yasmin Padilha Da Silva", "Miguel Angelo Dias De Lima"] },
-        { title: "Missa/Quarta", date: "2026-04-29", time: "19:00", location: "Matriz", ac: ["Mario Antonio Matiazi", "Sarah Souza De Oliveira", "Júlia Machado Stival"], co: ["Cecilia Pereira Ferreira", "Antonella Oruê De Lima", "Marina Tavares Moreira", "Sofia Farias Bael"] },
-        { title: "Missa/Quinta", date: "2026-04-30", time: "19:00", location: "São Vicente e São Benedito", ac: ["Lara Beatriz Neves Barbosa (IR)"], co: ["Lucas Borgert Oliveira (IR)", "Maria Fernanda Alban Menezes"] },
-      ];
-
-      // Step 3: Insert/Update masses
-      const massesToInsert: any[] = [];
-      const massesToUpdate: any[] = [];
-
-      realMasses.forEach((mass) => {
-        const massData = {
-          title: mass.title,
-          date: mass.date,
-          time: mass.time,
-          location: mass.location,
-          assignments: {
-            acolitos: getIds(mass.ac),
-            coroinhas: getIds(mass.co)
-          },
-          ownerId: user.id
-        };
-        
-        const existingMass = masses.find(m => m.date === mass.date && m.time === mass.time && m.location === mass.location);
-        if (existingMass) {
-          massesToUpdate.push({ id: existingMass.id, ...massData });
-        } else {
-          massesToInsert.push(massData);
-        }
-      });
-      
-      if (massesToInsert.length > 0) {
-        const { error } = await sdb.masses.insert(massesToInsert);
-        if (error) throw error;
-      }
-      
-      for (const m of massesToUpdate) {
-        const { error } = await sdb.masses.update(m.id, m);
-        if (error) throw error;
-      }
-      
-      alert("Base de dados REAL de Abril 2026 importada com sucesso!");
-    } catch (err: any) {
-      console.error("Erro ao importar base:", err);
-      if (err.code === '42501' || err.message?.includes('permission denied') || err.message?.includes('Forbidden')) {
-        alert("⚠️ ERRO DE PERMISSÃO: O Supabase bloqueou a gravação. Você precisa rodar o script SQL de Permissões (Policies/RLS) no console do Supabase para liberar as tabelas 'servers' e 'masses'.");
-      } else {
-        alert("Houve um erro ao importar a base: " + (err.message || "Verifique sua conexão."));
-      }
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const clearAllData = async () => {
-    if (!user || isDeleting) return;
+  const clearAllData = async () => {    if (!user || isDeleting) return;
     if (!window.confirm("ATENÇÃO: Isso apagará TODOS os servidores e missas cadastrados. Deseja continuar?")) return;
     
     setIsDeleting(true);
@@ -569,12 +221,11 @@ export default function App() {
   };
 
   // Actions
-  const addServer = async (name: string, type: ServerRole) => {
+  const addServer = async (data: { name: string, type: ServerRole, email?: string, whatsapp?: string, birthDate?: string }) => {
     if (!user) return;
     try {
       const { error } = await sdb.servers.insert({
-        name,
-        type,
+        ...data,
         active: true,
         ownerId: user.id
       });
@@ -931,12 +582,8 @@ export default function App() {
                 unassigned={unassignedServers} 
                 stats={serverStats} 
                 setView={setView} 
-                seedBase={seedBase} 
-                isSeeding={isSeeding} 
                 clearAllData={clearAllData} 
                 isDeleting={isDeleting}
-                isImportingDoc={isImportingDoc}
-                handleFileUpload={handleFileUpload}
               />
             )}
             {view === 'members' && <MembersView servers={servers} onAdd={addServer} onDelete={removeServer} stats={serverStats} />}
@@ -1129,12 +776,8 @@ function DashboardView({
   unassigned, 
   stats, 
   setView, 
-  seedBase, 
-  isSeeding, 
   clearAllData, 
-  isDeleting,
-  isImportingDoc,
-  handleFileUpload
+  isDeleting
 }: any) {
   return (
     <div className="space-y-10">
@@ -1146,34 +789,11 @@ function DashboardView({
           <div className="flex gap-3">
             <button 
               onClick={clearAllData}
-              disabled={isDeleting || isSeeding}
+              disabled={isDeleting}
               className="flex items-center gap-2 px-5 py-3 bg-white border border-rose-200 text-rose-500 rounded-xl text-sm font-bold hover:bg-rose-50 transition-all disabled:opacity-50"
             >
                {isDeleting ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
                {isDeleting ? 'Excluindo...' : 'Limpar Dados'}
-            </button>
-            <button 
-              onClick={() => document.getElementById('pdf-upload')?.click()}
-              disabled={isImportingDoc || isDeleting || isSeeding}
-              className="flex items-center gap-2 px-5 py-3 bg-white border border-emerald-200 text-emerald-600 rounded-xl text-sm font-bold hover:bg-emerald-50 transition-all disabled:opacity-50"
-            >
-               {isImportingDoc ? <Loader2 className="animate-spin" size={18} /> : <Share2 size={18} />}
-               {isImportingDoc ? 'Lendo...' : 'Importar PDF/Doc'}
-               <input 
-                 id="pdf-upload" 
-                 type="file" 
-                 accept=".pdf,.txt" 
-                 className="hidden" 
-                 onChange={handleFileUpload} 
-               />
-            </button>
-            <button 
-              onClick={seedBase}
-              disabled={isSeeding || isDeleting}
-              className="flex items-center gap-2 px-5 py-3 bg-white border border-indigo-200 text-indigo-600 rounded-xl text-sm font-bold hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-wait"
-            >
-               {isSeeding ? <Loader2 className="animate-spin" size={18} /> : <Download size={18} />}
-               {isSeeding ? 'Importando...' : 'Importar Dados Reais (Abril)'}
             </button>
             <button onClick={() => setView('schedule')} className="group flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
               <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> Montar Nova Escala
@@ -1323,12 +943,18 @@ function StatCardV2({ label, value, icon, color, alert }: any) {
 function MembersView({ servers, onAdd, onDelete, stats }: any) {
   const [name, setName] = useState('');
   const [type, setType] = useState<ServerRole>('coroinha');
+  const [email, setEmail] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [birthDate, setBirthDate] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onAdd(name, type);
+    onAdd({ name, type, email, whatsapp, birthDate });
     setName('');
+    setEmail('');
+    setWhatsapp('');
+    setBirthDate('');
   };
 
   return (
@@ -1346,36 +972,69 @@ function MembersView({ servers, onAdd, onDelete, stats }: any) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
-          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-8">
+          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
                 <UserPlus size={20} />
               </div>
-              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Novo Cadastro</h2>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Cadastro Manual</h2>
             </div>
 
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome Social / Completo</label>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome Completo</label>
                 <input 
                   type="text" 
                   value={name}
                   onChange={e => setName(e.target.value)}
                   placeholder="Ex: Gabriel Martins"
-                  className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 focus:border-indigo-500 focus:bg-white focus:ring-0 outline-none transition-all font-semibold shadow-inner"
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">WhatsApp</label>
+                  <input 
+                    type="text" 
+                    value={whatsapp}
+                    onChange={e => setWhatsapp(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nascimento</label>
+                  <input 
+                    type="date" 
+                    value={birthDate}
+                    onChange={e => setBirthDate(e.target.value)}
+                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">E-mail</label>
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="exemplo@igreja.com"
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
                 />
               </div>
               
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Função Canônica</label>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Função</label>
                 <div className="grid grid-cols-2 gap-3">
                   <RoleSelector active={type === 'acolito'} onClick={() => setType('acolito')} label="Acólito" />
                   <RoleSelector active={type === 'coroinha'} onClick={() => setType('coroinha')} label="Coroinha" />
                 </div>
               </div>
 
-              <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
-                <Plus size={18} /> Cadastrar Membro
+              <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
+                <Plus size={18} /> Salvar Membro
               </button>
             </div>
           </form>
@@ -1391,27 +1050,31 @@ function MembersView({ servers, onAdd, onDelete, stats }: any) {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {servers.map((s: any) => (
-                <motion.div layout key={s.id} className="glass-card glass-card-hover p-4 flex items-center justify-between group">
+                <motion.div layout key={s.id} className="glass-card glass-card-hover p-5 flex items-center justify-between group">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg ${s.type === 'acolito' ? 'bg-indigo-600' : 'bg-blue-600'}`}>
                       {s.name[0]}
                     </div>
-                    <div>
-                      <h4 className="font-bold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors uppercase text-sm leading-none mb-1.5">{s.name}</h4>
-                      <div className="flex items-center gap-2">
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors uppercase text-sm leading-none">{s.name}</h4>
+                      <div className="flex flex-wrap items-center gap-2">
                          <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${s.type === 'acolito' ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-blue-50 border-blue-100 text-blue-700'}`}>
                            {s.type}
                          </span>
                          <span className="text-[10px] font-mono font-bold text-slate-400">{stats[s.id] || 0} Missas</span>
                       </div>
+                      {(s.whatsapp || s.email || s.birthDate) && (
+                        <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 font-medium">
+                          {s.whatsapp && <span className="flex items-center gap-1 opacity-70"><Phone size={10} /> {s.whatsapp}</span>}
+                          {s.email && <span className="flex items-center gap-1 opacity-70"><Mail size={10} /> {s.email}</span>}
+                          {s.birthDate && <span className="flex items-center gap-1 opacity-70 text-[9px] font-bold">Nasc: {new Date(s.birthDate).toLocaleDateString('pt-BR')}</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex gap-1">
                     <button onClick={() => onDelete(s.id)} className="p-2 text-slate-200 hover:text-rose-500 transition-colors group/trash">
                       <Trash2 size={18} className="group-hover/trash:scale-110 transition-transform" />
-                    </button>
-                    <button className="p-2 text-slate-200 hover:text-indigo-600 transition-colors">
-                      <MoreVertical size={18} />
                     </button>
                   </div>
                 </motion.div>

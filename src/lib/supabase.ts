@@ -53,6 +53,9 @@ export const db = {
         name: item.name,
         type: item.type,
         active: item.active !== undefined ? item.active : true,
+        email: item.email,
+        whatsapp: item.whatsapp,
+        birth_date: item.birthDate || item.birth_date,
         owner_id: item.owner_id || item.ownerId
       }));
       return supabase.from('servers').insert(payload).select();
@@ -62,6 +65,9 @@ export const db = {
       if (data.name !== undefined) payload.name = data.name;
       if (data.type !== undefined) payload.type = data.type;
       if (data.active !== undefined) payload.active = data.active;
+      if (data.email !== undefined) payload.email = data.email;
+      if (data.whatsapp !== undefined) payload.whatsapp = data.whatsapp;
+      if (data.birthDate !== undefined) payload.birth_date = data.birthDate;
       return supabase.from('servers').update(payload).eq('id', id);
     },
     delete: (id: string) => supabase.from('servers').delete().eq('id', id),
