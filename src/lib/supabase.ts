@@ -47,12 +47,14 @@ export const db = {
   servers: {
     list: (userId: string) => supabase.from('servers').select('*').eq('owner_id', userId),
     insert: (data: any) => {
-      const payload = {
-        name: data.name,
-        type: data.type,
-        active: data.active,
-        owner_id: data.ownerId
-      };
+      const isArray = Array.from(data).length !== undefined && typeof data !== 'string';
+      const items = isArray ? data : [data];
+      const payload = items.map((item: any) => ({
+        name: item.name,
+        type: item.type,
+        active: item.active !== undefined ? item.active : true,
+        owner_id: item.owner_id || item.ownerId
+      }));
       return supabase.from('servers').insert(payload).select();
     },
     update: (id: string, data: any) => {
@@ -67,14 +69,16 @@ export const db = {
   masses: {
     list: (userId: string) => supabase.from('masses').select('*').eq('owner_id', userId),
     insert: (data: any) => {
-      const payload = {
-        title: data.title,
-        date: data.date,
-        time: data.time,
-        location: data.location,
-        assignments: data.assignments,
-        owner_id: data.ownerId
-      };
+      const isArray = Array.from(data).length !== undefined && typeof data !== 'string';
+      const items = isArray ? data : [data];
+      const payload = items.map((item: any) => ({
+        title: item.title,
+        date: item.date,
+        time: item.time,
+        location: item.location,
+        assignments: item.assignments || {},
+        owner_id: item.owner_id || item.ownerId
+      }));
       return supabase.from('masses').insert(payload).select();
     },
     update: (id: string, data: any) => {

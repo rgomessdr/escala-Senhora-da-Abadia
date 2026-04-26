@@ -225,54 +225,86 @@ export default function App() {
       }
 
       // 🔑 Call Gemini to parse
-      const apiKey = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       
       if (!apiKey || apiKey === 'undefined' || apiKey === '') {
         throw new Error("Chave do Gemini (GEMINI_API_KEY) não encontrada. Certifique-se de que a variável de ambiente está configurada.");
       }
-
-      const ai = new GoogleGenAI(apiKey);
-      const model = ai.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        systemInstruction: "Você é um assistente de gestão paroquial especializado em ler escalas de missa. Extraia os dados em JSON rigoroso. Regras: 1. Nomes devem ser limpos (Remover cargos). 2. Datas devem estar no formato YYYY-MM-DD. 3. Se não houver ano no texto, assuma 2026. 4. Identifique o Local da missa (ex: Matriz, Comunidade X)."
-      });
-
-      const prompt = `Analise este texto de escala e extraia:
+      
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const prompt = `Analise este texto de uma escala paroquial e extraia os dados estruturados.
+      Regras: 1. Nomes devem ser limpos (Remover cargos). 2. Datas devem estar no formato YYYY-MM-DD. 3. Se não houver ano no texto, assuma 2026. 4. Identifique o Local da missa (ex: Matriz, Comunidade X).
+      
+      Extraia:
       1. Lista de servidores: { "name": "NOME", "type": "acolito" ou "coroinha" }
       2. Lista de missas: { "title": "TÍTULO", "date": "YYYY-MM-DD", "time": "HH:MM", "location": "LOCAL", "acolitos": ["NOME1", "NOME2"], "coroinhas": ["NOME1"] }
       
       Importante: Retorne APENAS o JSON.
       
-      Texto:
+      Texto extraído:
       """
       ${textContent}
       """`;
 
-      const result = await model.generateContent(prompt);
-      const responseText = result.response.text();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          systemInstruction: "Você é um assistente de gestão paroquial especializado em ler escalas de missa. Retorne apenas JSON puro.",
+          responseMimeType: "application/json"
+        }
+      });
       
-      // Clean possible markdown backticks
-      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const cleanJson = response.text?.trim() || '{}';
       const data = JSON.parse(cleanJson);
       if (!data.servers || !data.masses) throw new Error("A IA não conseguiu identificar os dados corretamente.");
 
       // --- Sync with Database ---
       const nameToId: Record<string, string> = {};
-      servers.forEach(s => nameToId[s.name.trim().toLowerCase()] = s.id);
+      servers.forEach(s => {
+        if (s.name) {
+          nameToId[s.name.trim().toLowerCase()] = s.id;
+        }
+      });
 
       // 1. Insert missing servers
-      const newServers = data.servers.filter((s: any) => !nameToId[s.name.trim().toLowerCase()]);
-      if (newServers.length > 0) {
-        const { data: insertedServers, error: sError } = await sdb.servers.insert(
-          newServers.map((s: any) => ({ 
-            name: s.name.trim(), 
-            type: s.type, 
-            active: true, 
-            owner_id: user.id 
-          }))
-        );
-        if (sError) throw sError;
-        insertedServers?.forEach(s => nameToId[s.name.trim().toLowerCase()] = s.id);
+      const safeTrim = (n: any) => (typeof n === 'string' ? n.trim() : '');
+      
+      const newServersFromAI = (data.servers || []).filter((s: any) => {
+        const name = safeTrim(s?.name);
+        return name.length > 0 && !nameToId[name.toLowerCase()];
+      });
+
+      if (newServersFromAI.length > 0) {
+        // Ensure uniqueness for this chunk
+        const uniqueToInsertMap = new Map();
+        newServersFromAI.forEach((s: any) => {
+          const name = safeTrim(s.name);
+          const lowerName = name.toLowerCase();
+          if (!uniqueToInsertMap.has(lowerName)) {
+            uniqueToInsertMap.set(lowerName, {
+              name: name,
+              type: s.type === 'acolito' ? 'acolito' : 'coroinha',
+              active: true,
+              owner_id: user.id
+            });
+          }
+        });
+
+        const finalServersToInsert = Array.from(uniqueToInsertMap.values());
+        
+        const { data: insertedServers, error: sError } = await sdb.servers.insert(finalServersToInsert);
+        if (sError) {
+          console.error("Erro ao inserir servidores (Import Doc):", sError);
+          throw sError;
+        }
+        
+        insertedServers?.forEach(s => {
+          if (s.name) {
+            nameToId[s.name.trim().toLowerCase()] = s.id;
+          }
+        });
       }
 
       // 2. Insert masses
@@ -349,13 +381,28 @@ export default function App() {
       // Step 2: Prepare and insert missing servers
       const safeTrim = (n: any) => (typeof n === 'string' ? n.trim() : '');
       
+      // Use Set to ensure uniqueness in the current run (case-insensitive for check)
+      const uniqueNewNames = new Set<string>();
+
       const missingAcolitos = acolitosNames
         .map(safeTrim)
-        .filter(n => n.length > 0 && !nameToId[n]);
+        .filter(n => n.length > 0 && !nameToId[n])
+        .filter(n => {
+          const lower = n.toLowerCase();
+          if (uniqueNewNames.has(lower)) return false;
+          uniqueNewNames.add(lower);
+          return true;
+        });
         
       const missingCoroinhas = coroinhasNames
         .map(safeTrim)
-        .filter(n => n.length > 0 && !nameToId[n]);
+        .filter(n => n.length > 0 && !nameToId[n])
+        .filter(n => {
+          const lower = n.toLowerCase();
+          if (uniqueNewNames.has(lower)) return false;
+          uniqueNewNames.add(lower);
+          return true;
+        });
 
       if (missingAcolitos.length > 0 || missingCoroinhas.length > 0) {
         const serversToInsert = [
@@ -364,15 +411,23 @@ export default function App() {
         ];
         
         console.log("Inserindo novos servidores:", serversToInsert);
-        const { data, error } = await sdb.servers.insert(serversToInsert);
-        if (error) {
-          console.error("Erro detalhado na inserção de servidores:", error);
-          throw error;
-        }
         
-        data?.forEach(s => {
-          nameToId[s.name.trim()] = s.id;
-        });
+        // Filter out any potential invalid objects just in case
+        const validServersToInsert = serversToInsert.filter(s => s.name && s.name.length > 0);
+        
+        if (validServersToInsert.length > 0) {
+          const { data: insertedData, error } = await sdb.servers.insert(validServersToInsert);
+          if (error) {
+            console.error("Erro detalhado na inserção de servidores:", error);
+            throw error;
+          }
+          
+          insertedData?.forEach(s => {
+            if (s.name) {
+              nameToId[s.name.trim()] = s.id;
+            }
+          });
+        }
       }
 
       const getIds = (names: string[]) => names.map(n => nameToId[n.trim()]).filter(id => !!id);
