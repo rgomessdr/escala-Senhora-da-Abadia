@@ -29,17 +29,8 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { GoogleGenAI, Type } from "@google/genai";
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
-// Safe access to Gemini Key
-const getApiKey = () => {
-  try {
-    return process.env.GEMINI_API_KEY || '';
-  } catch (e) {
-    return '';
-  }
-};
-
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 import { Server, Mass, View, ServerRole } from './types';
 import { User } from '@supabase/supabase-js';
 
@@ -234,54 +225,35 @@ export default function App() {
       }
 
       // 🔑 Call Gemini to parse
-      const ai = new GoogleGenAI({ apiKey: getApiKey() });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Analise este texto de uma escala paroquial e extraia os dados estruturados.
-        
-        Texto extraído:
-        """
-        ${textContent}
-        """`,
-        config: {
-          systemInstruction: "Você é um assistente de gestão paroquial. Extraia: 1. Lista de servidores (nome e tipo: 'acolito' ou 'coroinha'). 2. Lista de missas (título, data no formato YYYY-MM-DD, hora HH:MM, local, e nomes dos acolitos e coroinhas escalados). Use JSON puro.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              servers: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ["acolito", "coroinha"] }
-                  },
-                  required: ["name", "type"]
-                }
-              },
-              masses: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    title: { type: Type.STRING },
-                    date: { type: Type.STRING },
-                    time: { type: Type.STRING },
-                    location: { type: Type.STRING },
-                    acolitos: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    coroinhas: { type: Type.ARRAY, items: { type: Type.STRING } }
-                  },
-                  required: ["title", "date", "time", "location", "acolitos", "coroinhas"]
-                }
-              }
-            },
-            required: ["servers", "masses"]
-          }
-        }
+      const apiKey = process.env.GEMINI_API_KEY;
+      
+      if (!apiKey || apiKey === 'undefined') {
+        throw new Error("Chave do Gemini (GEMINI_API_KEY) não encontrada. Se estiver no AI Studio, configure em 'Settings -> Secrets'. Se estiver no Vercel, adicione como 'Environment Variable'.");
+      }
+
+      const ai = new GoogleGenAI(apiKey);
+      const model = ai.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        systemInstruction: "Você é um assistente de gestão paroquial especializado em ler escalas de missa. Extraia os dados em JSON rigoroso. Regras: 1. Nomes devem ser limpos (Remover cargos). 2. Datas devem estar no formato YYYY-MM-DD. 3. Se não houver ano no texto, assuma 2026. 4. Identifique o Local da missa (ex: Matriz, Comunidade X)."
       });
 
-      const data = JSON.parse(response.text || '{}');
+      const prompt = `Analise este texto de escala e extraia:
+      1. Lista de servidores: { "name": "NOME", "type": "acolito" ou "coroinha" }
+      2. Lista de missas: { "title": "TÍTULO", "date": "YYYY-MM-DD", "time": "HH:MM", "location": "LOCAL", "acolitos": ["NOME1", "NOME2"], "coroinhas": ["NOME1"] }
+      
+      Importante: Retorne APENAS o JSON.
+      
+      Texto:
+      """
+      ${textContent}
+      """`;
+
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text();
+      
+      // Clean possible markdown backticks
+      const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const data = JSON.parse(cleanJson);
       if (!data.servers || !data.masses) throw new Error("A IA não conseguiu identificar os dados corretamente.");
 
       // --- Sync with Database ---
