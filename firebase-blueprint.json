@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "Server": {
+      "title": "Server",
+      "description": "A member (acolito or coroinha) available for assignments.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Full name of the server" },
+        "type": { "type": "string", "enum": ["acolito", "coroinha"], "description": "Role of the server" },
+        "active": { "type": "boolean", "description": "Whether the server is currently active" },
+        "ownerId": { "type": "string", "description": "UID of the user who created this member" }
+      },
+      "required": ["name", "type", "active", "ownerId"]
+    },
+    "Mass": {
+      "title": "Mass",
+      "description": "A scheduled mass celebration.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the mass" },
+        "date": { "type": "string", "format": "date", "description": "Date of the mass" },
+        "time": { "type": "string", "description": "Time of the mass" },
+        "location": { "type": "string", "description": "Location of the mass" },
+        "assignments": {
+          "type": "object",
+          "properties": {
+            "acolitos": { "type": "array", "items": { "type": "string" } },
+            "coroinhas": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "ownerId": { "type": "string", "description": "UID of the user who created this mass" }
+      },
+      "required": ["title", "date", "time", "location", "assignments", "ownerId"]
+    }
+  },
+  "firestore": {
+    "/servers/{serverId}": {
+      "schema": "Server",
+      "description": "Collection of all members."
+    },
+    "/masses/{massId}": {
+      "schema": "Mass",
+      "description": "Collection of all mass celebrations."
+    }
+  }
+}

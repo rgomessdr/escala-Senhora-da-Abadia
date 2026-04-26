@@ -1,0 +1,1395 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  LayoutDashboard, 
+  Users, 
+  Calendar, 
+  ClipboardList, 
+  Plus, 
+  Trash2, 
+  AlertCircle, 
+  CheckCircle2,
+  ChevronRight,
+  UserPlus,
+  Church,
+  Clock,
+  MapPin,
+  AlertTriangle,
+  Menu,
+  X,
+  LogOut,
+  LogIn,
+  Loader2,
+  Download,
+  MoreVertical,
+  Layers
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  addDoc, 
+  deleteDoc, 
+  doc, 
+  updateDoc,
+  getDocFromServer
+} from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { db, auth, loginWithEmail, registerWithEmail, signOut } from './lib/firebase';
+import { Server, Mass, View, ServerRole } from './types';
+
+// --- Error Handling ---
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<View>('dashboard');
+  const [servers, setServers] = useState<Server[]>([]);
+  const [masses, setMasses] = useState<Mass[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Connection Test
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        // Silently log or handle connection issues - common on initial server cold start
+        console.warn("Iniciando conexão com o banco de dados...");
+      }
+    }
+    testConnection();
+  }, []);
+
+  const handleEmailLogin = async (email: string, pass: string) => {
+    setAuthError(null);
+    try {
+      await loginWithEmail(email, pass);
+    } catch (error: any) {
+      console.error("Erro de Login:", error);
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        setAuthError('Credenciais inválidas. Verifique seu e-mail e senha.');
+      } else if (error.code === 'auth/invalid-email') {
+        setAuthError('Formato de e-mail inválido.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setAuthError('O login por E-mail/Senha precisa ser ativado no Firebase Console (Authentication > Sign-in method).');
+      } else {
+        setAuthError(`Erro ao acessar o sistema: ${error.message || error.code}`);
+      }
+    }
+  };
+
+  const handleEmailRegister = async (email: string, pass: string, name: string) => {
+    setAuthError(null);
+    try {
+      await registerWithEmail(email, pass, name);
+    } catch (error: any) {
+      console.error("Erro de Cadastro:", error);
+      if (error.code === 'auth/email-already-in-use') {
+        setAuthError('Este administrador já está cadastrado.');
+      } else if (error.code === 'auth/weak-password') {
+        setAuthError('A senha deve ter pelo menos 6 caracteres.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        setAuthError('O cadastro por E-mail/Senha precisa ser ativado no Firebase Console.');
+      } else {
+        setAuthError(`Erro ao criar conta: ${error.message || error.code}`);
+      }
+    }
+  };
+
+  // Auth Listener
+  useEffect(() => {
+    return onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+  }, []);
+
+  // Firestore Listeners
+  useEffect(() => {
+    if (!user) {
+      setServers([]);
+      setMasses([]);
+      return;
+    }
+
+    const serversQuery = query(collection(db, 'servers'), where('ownerId', '==', user.uid));
+    const unsubServers = onSnapshot(serversQuery, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Server));
+      setServers(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'servers'));
+
+    const massesQuery = query(collection(db, 'masses'), where('ownerId', '==', user.uid));
+    const unsubMasses = onSnapshot(massesQuery, (snapshot) => {
+      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Mass));
+      setMasses(data);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'masses'));
+
+    return () => {
+      unsubServers();
+      unsubMasses();
+    };
+  }, [user]);
+
+  // Statistics
+  const serverStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    servers.forEach(s => counts[s.id] = 0);
+    masses.forEach(m => {
+      [...m.assignments.acolitos, ...m.assignments.coroinhas].forEach(id => {
+        if (counts[id] !== undefined) counts[id]++;
+      });
+    });
+    return counts;
+  }, [servers, masses]);
+
+  const unassignedServers = useMemo(() => {
+    return servers.filter(s => serverStats[s.id] === 0);
+  }, [servers, serverStats]);
+
+  const [isSeeding, setIsSeeding] = useState(false);
+
+  // Seeding
+  const seedBase = async () => {
+    if (!user || isSeeding) return;
+    if (!window.confirm("Deseja importar a base de dados padrão da Paróquia (Acólitos, Coroinhas e Missas de Abril)?")) return;
+
+    setIsSeeding(true);
+    try {
+      const acolitos = [
+        "Ana Gabrielly Riquelme Fernandes", "Andrey Henrique Gotttems Rossatte", "Daniel Queiroz De Souza",
+        "Eric Padilha De Matos", "Ezequiel Barbosa Velasco", "Gabrielly Matos De Souza", "Júlia Machado Stival",
+        "Lara Beatriz Neves Barbosa (IR)", "Leonardo Alcântara", "Leonardo Gabriel Alonso Moreira",
+        "Lucas Andreetta Ortega", "Luiz Otavio Pereira", "Luiza Emanuelle De Siqueira Freitas",
+        "Pedro Lucas Souza Bael", "Sarah Souza De Oliveira", "Mario Antonio Matiazi"
+      ];
+
+      const coroinhas = [
+        "Alice Santolin Da Silva", "Ana Helena Menezes Ozorio", "Antonio Carlos de Souza Alba (IR)",
+        "Ana Sofia Carriel Costa (IR)", "Antonella Oruê De Lima", "Arthur Henrique Mareco Grubert",
+        "Barbara Frota Da Silva", "Bárbara Kaori Muta Lo", "Beatriz Barbier de Oliveira (IR)",
+        "Bruno Jose Marques Limberger (IR)", "Carolina Pasinatto Tonini", "Cecilia Pereira Ferreira",
+        "Elisa Patron Vicentin Moresco (IR)", "Gabriel dos Santos Cunico (IR)", "Ingrid Vitoria Rodrigues Dos Santos",
+        "João Miguel Moraes De Araújo", "Jordana Francener Colet", "Júlia Prates Gomes", "Júlia Rodrigues Arakaki (IR)",
+        "Laura Gimenes Knippelberg (IR)", "Livia Camilo De Mendonça", "Lucas Borgert Oliveira (IR)",
+        "Luiz Otávio Straliotto Miotto (IR)", "Luiza Carraro Hernandes", "Maria Alice Bogotoli",
+        "Maria Alice Rossoni Macarini", "Maria Cecilia Perdomo Veronka", "Maria Fernanda Alban Menezes",
+        "Maria Fernanda Moraes de Carvalho", "Maria Valentina Portes Dos Santos", "Maria Vitoria Bernardes Camara",
+        "Maria Vitória Lima Rossoni", "Marina Tavares Moreira", "Micaella Saracho Targa (IR)",
+        "Miguel Angelo Dias De Lima", "Miguel Figueiredo Biazotto", "Milena de Oliveira Souza",
+        "Nicole Maria Silva Sá", "Pedro Henrique Lepri Ribeiro", "Pedro Straliotto Silva",
+        "Renata Valentina Izolan Coldebella", "Sofia Farias Bael", "Vitoria Camilo Rocha (IR)", "Yasmin Padilha Da Silva"
+      ];
+
+      // Add Servers
+      for (const name of acolitos) {
+        try {
+          await addDoc(collection(db, 'servers'), { name, type: 'acolito', active: true, ownerId: user.uid });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'servers');
+        }
+      }
+      for (const name of coroinhas) {
+        try {
+          await addDoc(collection(db, 'servers'), { name, type: 'coroinha', active: true, ownerId: user.uid });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'servers');
+        }
+      }
+
+      // Add Standard Masses for April 2026
+      const dates = ["2026-04-05", "2026-04-12", "2026-04-19", "2026-04-26"];
+      for (const d of dates) {
+        const massTemplates = [
+          { title: "Missa de Domingo", time: "07:30", location: "Matriz" },
+          { title: "Missa de Domingo", time: "08:00", location: "Nossa Senhora Das Graças" },
+          { title: "Missa de Domingo", time: "09:00", location: "São José e São Bento" },
+          { title: "Missa de Domingo", time: "10:00", location: "Matriz" },
+          { title: "Missa de Domingo", time: "17:00", location: "Nossa Senhora Aparecida" },
+          { title: "Missa de Domingo", time: "19:00", location: "Matriz" },
+          { title: "Missa de Domingo", time: "19:00", location: "São José Operário" },
+        ];
+        
+        for (const template of massTemplates) {
+          await addDoc(collection(db, 'masses'), { ...template, date: d, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
+        }
+      }
+
+      // Add Weekday Masses mentioned in rules
+      const weekdays = [
+        { title: "Novena", date: "2026-04-01", time: "19:00", location: "Matriz" },
+        { title: "Caacupé", date: "2026-04-07", time: "19:00", location: "Caacupé" },
+        { title: "São Vicente", date: "2026-04-09", time: "19:00", location: "São Vicente e São Benedito" },
+        { title: "Santa Luzia", date: "2026-04-10", time: "19:00", location: "Santa Luzia" },
+        { title: "São Pedro e São Paulo", date: "2026-04-11", time: "19:00", location: "São Pedro e São Paulo" },
+        { title: "Bom Samaritano", date: "2026-04-14", time: "19:00", location: "Bom Samaritano" },
+        { title: "Novena", date: "2026-04-15", time: "19:30", location: "Matriz" },
+      ];
+
+      for (const mass of weekdays) {
+        await addDoc(collection(db, 'masses'), { ...mass, assignments: { acolitos: [], coroinhas: [] }, ownerId: user.uid });
+      }
+      
+      alert("Base de dados importada com sucesso!");
+    } catch (err) {
+      console.error("Erro ao importar base:", err);
+      alert("Houve um erro ao importar a base. Verifique as permissões do banco de dados.");
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Actions
+  const addServer = async (name: string, type: ServerRole) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'servers'), {
+        name,
+        type,
+        active: true,
+        ownerId: user.uid
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'servers');
+    }
+  };
+
+  const removeServer = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'servers', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `servers/${id}`);
+    }
+  };
+
+  const addMass = async (title: string, date: string, time: string, location: string) => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'masses'), {
+        title,
+        date,
+        time,
+        location,
+        assignments: { acolitos: [], coroinhas: [] },
+        ownerId: user.uid
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'masses');
+    }
+  };
+
+  const removeMass = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'masses', id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `masses/${id}`);
+    }
+  };
+
+  const toggleAssignment = async (massId: string, serverId: string, role: ServerRole) => {
+    const mass = masses.find(m => m.id === massId);
+    if (!mass) return;
+
+    const category = role === 'acolito' ? 'acolitos' : 'coroinhas';
+    const exists = mass.assignments[category].includes(serverId);
+    const updatedList = exists 
+      ? mass.assignments[category].filter(id => id !== serverId)
+      : [...mass.assignments[category], serverId];
+
+    try {
+      await updateDoc(doc(db, 'masses', massId), {
+        [`assignments.${category}`]: updatedList
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `masses/${massId}`);
+    }
+  };
+
+  const getWeekOfMonth = (date: Date) => {
+    const day = date.getUTCDate();
+    return Math.ceil(day / 7);
+  };
+
+  const autoSchedule = async () => {
+    if (!user || masses.length === 0 || servers.length === 0) return;
+    
+    // Sort masses by date and time to process chronologically
+    const sortedMasses = [...masses].sort((a, b) => {
+      const dateDiff = a.date.localeCompare(b.date);
+      return dateDiff !== 0 ? dateDiff : a.time.localeCompare(b.time);
+    });
+
+    const currentStats = { ...serverStats };
+    const peopleAssignedOnDate: Record<string, Set<string>> = {}; // date -> set of serverIds
+
+    for (const mass of sortedMasses) {
+      if (!peopleAssignedOnDate[mass.date]) peopleAssignedOnDate[mass.date] = new Set();
+      
+      const isMatriz = mass.location.toLowerCase().includes('matriz');
+      const dateObj = new Date(mass.date + 'T00:00:00');
+      const dayOfWeek = dateObj.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
+      const weekOfMonth = getWeekOfMonth(dateObj);
+      const isSunday = dayOfWeek === 0;
+
+      // Targets based on rules
+      const acolitosTarget = isMatriz ? 3 : (isSunday ? 2 : 1);
+      const coroinhasTarget = isMatriz ? 4 : 2;
+
+      let newAcolitos = [...mass.assignments.acolitos];
+      let newCoroinhas = [...mass.assignments.coroinhas];
+
+      const tryAssign = (server: Server, currentList: string[]) => {
+        if (currentList.includes(server.id)) return false;
+        if (peopleAssignedOnDate[mass.date].has(server.id)) return false;
+
+        const n = server.name;
+        const loc = mass.location.toLowerCase();
+        const t = mass.time;
+        
+        let isForced = false;
+
+        // --- ACOLITOS RULES ---
+        if (server.type === 'acolito') {
+          if (n.includes("Andrey Henrique") && !isSunday) return false;
+          if (n.includes("Júlia Machado") && dayOfWeek === 4) return false;
+          if (n.includes("Gabrielly Matos") && ![0, 6].includes(dayOfWeek)) return false;
+          
+          if (n.includes("Eric Padilha")) {
+            if (dayOfWeek === 3 && weekOfMonth === 1 && loc.includes('matriz') && t === "19:00") isForced = true; 
+            if (dayOfWeek === 5 && weekOfMonth === 2 && loc.includes('luzia') && t === "19:00") isForced = true;
+            if (dayOfWeek === 6 && weekOfMonth === 3 && loc.includes('pedro') && t === "19:00") isForced = true;
+            if (dayOfWeek === 0 && weekOfMonth === 4 && loc.includes('matriz') && t === "10:00") isForced = true;
+          }
+          if (n.includes("Lara Beatriz")) {
+            if (dayOfWeek === 0 && weekOfMonth === 1 && loc.includes('aparecida') && t === "17:00") isForced = true;
+            if (dayOfWeek === 0 && (weekOfMonth === 2 || weekOfMonth === 5) && loc.includes('graças') && t === "08:00") isForced = true;
+            if (dayOfWeek === 5 && weekOfMonth === 3 && loc.includes('luzia') && t === "19:00") isForced = true;
+          }
+        }
+
+        // --- COROINHAS RULES ---
+        if (server.type === 'coroinha') {
+          if (n.includes("Antonio Carlos") && dayOfWeek === 0 && weekOfMonth === 3 && loc.includes('matriz') && t === "07:30") isForced = true;
+          if (n.includes("Júlia Prates") && !isSunday) return false;
+          if (n.includes("Beatriz Barbier") && (!isSunday || weekOfMonth === 3 || t === "07:30" || t === "19:00")) return false;
+          if (n.includes("Carolina Pasinatto") && (!isSunday || (!loc.includes('matriz') && !loc.includes('aparecida')))) return false;
+          if (n.includes("Ana Sofia")) {
+             if (dayOfWeek === 3 && weekOfMonth === 3 && t === "19:30") isForced = true;
+             if (dayOfWeek === 0 && weekOfMonth === 1 && loc.includes('matriz') && t === "10:00") isForced = true;
+             if (dayOfWeek === 6 && weekOfMonth === 5 && loc.includes('pedro') && t === "19:00") isForced = true;
+             if (dayOfWeek === 2 && weekOfMonth === 2 && loc.includes('caacupe') && t === "19:00") isForced = true;
+             if (dayOfWeek === 0 && weekOfMonth === 4 && loc.includes('matriz') && t === "10:00") return false;
+          }
+          
+          const count = currentStats[server.id] || 0;
+          if (n.includes("Elisa Patron") && count >= 2) return false;
+          if (n.includes("Luiza Carraro") && count >= 1 && dayOfWeek === 3) return false;
+          if (n.includes("Maria Fernanda Moraes") && count >= 1) return false;
+          if (n.includes("Nicole Maria") && count >= 1) return false;
+          if (n.includes("Renata Valentina") && count >= 1) return false;
+        }
+
+        return { allowed: true, isForced };
+      };
+
+      // Fill Acolitos
+      if (newAcolitos.length < acolitosTarget) {
+        const needed = acolitosTarget - newAcolitos.length;
+        const available = servers
+          .map(s => ({ s, ...tryAssign(s, newAcolitos) }))
+          .filter(res => res.allowed)
+          .sort((a, b) => {
+            if (a.isForced && !b.isForced) return -1;
+            if (!a.isForced && b.isForced) return 1;
+            
+            let scoreA = currentStats[a.s.id] || 0;
+            let scoreB = currentStats[b.s.id] || 0;
+            if ((a.s.name.includes("Ana Gabrielly") || a.s.name.includes("Lucas Andreetta") || a.s.name.includes("Pedro Lucas")) && dayOfWeek === 2) scoreA += 5;
+            if ((b.s.name.includes("Ana Gabrielly") || b.s.name.includes("Lucas Andreetta") || b.s.name.includes("Pedro Lucas")) && dayOfWeek === 2) scoreB += 5;
+            if (a.s.name.includes("Daniel Queiroz") && dayOfWeek === 3) scoreA += 5;
+            if (b.s.name.includes("Daniel Queiroz") && dayOfWeek === 3) scoreB += 5;
+            return scoreA - scoreB;
+          });
+        
+        const selected = available.slice(0, needed);
+        selected.forEach(res => {
+          newAcolitos.push(res.s.id);
+          currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
+          peopleAssignedOnDate[mass.date].add(res.s.id);
+        });
+      }
+
+      // Fill Coroinhas
+      if (newCoroinhas.length < coroinhasTarget) {
+        const needed = coroinhasTarget - newCoroinhas.length;
+        const available = servers
+          .map(s => ({ s, ...tryAssign(s, newCoroinhas) }))
+          .filter(res => res.allowed)
+          .sort((a, b) => {
+            if (a.isForced && !b.isForced) return -1;
+            if (!a.isForced && b.isForced) return 1;
+            return (currentStats[a.s.id] || 0) - (currentStats[b.s.id] || 0);
+          });
+        
+        const selected = available.slice(0, needed);
+        selected.forEach(res => {
+          newCoroinhas.push(res.s.id);
+          currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
+          peopleAssignedOnDate[mass.date].add(res.s.id);
+        });
+      }
+
+      try {
+        await updateDoc(doc(db, 'masses', mass.id), {
+          'assignments.acolitos': newAcolitos,
+          'assignments.coroinhas': newCoroinhas
+        });
+      } catch (err) {
+        console.error("Error smart-scheduling mass", mass.id, err);
+        alert("Erro ao salvar escala automatica. Verifique sua conexão.");
+        return;
+      }
+    }
+    alert("Escala montada com sucesso!");
+  };
+
+  const clearSchedule = async () => {
+    if (!user || !window.confirm('Deseja realmente limpar TODOS os escalados de todas as missas?')) return;
+    for (const mass of masses) {
+      try {
+        await updateDoc(doc(db, 'masses', mass.id), {
+          'assignments.acolitos': [],
+          'assignments.coroinhas': []
+        });
+      } catch (err) {
+        console.error("Error clearing mass", mass.id, err);
+      }
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-indigo-600" size={40} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <AuthView 
+        onEmailLogin={handleEmailLogin}
+        onEmailRegister={handleEmailRegister}
+        error={authError}
+      />
+    );
+  }
+
+
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50">
+      {/* Top Navigation Bar */}
+      <nav className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between shadow-sm z-30 sticky top-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-700 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+            <Church size={22} />
+          </div>
+          <div className="hidden sm:block">
+            <h1 className="text-sm font-bold tracking-tight text-slate-800 uppercase leading-none">Abadia Sidrolândia</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Gestão de Escalas • MS</p>
+          </div>
+        </div>
+
+        {/* View Switcher - Desktop */}
+        <div className="hidden md:flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+          <NavTab active={view === 'dashboard'} onClick={() => setView('dashboard')} label="Dashboard" />
+          <NavTab active={view === 'members'} onClick={() => setView('members')} label="Membros" />
+          <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
+          <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label="Montar Escala" />
+        </div>
+
+        {/* User / Logout */}
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex flex-col items-end mr-2">
+            <span className="text-xs font-bold text-slate-700">{user.displayName || 'Usuário'}</span>
+            <button onClick={signOut} className="text-[10px] font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors">Sair</button>
+          </div>
+          <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 uppercase">
+            {user.displayName?.[0] || user.email?.[0] || '?'}
+          </div>
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="md:hidden p-2 text-slate-600">
+            {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+      </nav>
+
+      {/* Mobile Drawer */}
+      <AnimatePresence>
+        {isSidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute right-0 top-0 bottom-0 w-64 bg-white shadow-2xl flex flex-col p-6 gap-6"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-4 border-b">
+                <span className="font-bold text-slate-800 uppercase tracking-widest text-sm">Menu</span>
+                <button onClick={() => setIsSidebarOpen(false)}><X size={24} className="text-slate-400" /></button>
+              </div>
+              <div className="space-y-2">
+                <NavButtonView active={view === 'dashboard'} onClick={() => { setView('dashboard'); setIsSidebarOpen(false); }} icon={<LayoutDashboard size={18} />} label="Dashboard" />
+                <NavButtonView active={view === 'members'} onClick={() => { setView('members'); setIsSidebarOpen(false); }} icon={<Users size={18} />} label="Membros" />
+                <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<Church size={18} />} label="Missas" />
+                <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
+              </div>
+              <div className="mt-auto pt-6 border-t">
+                <button onClick={signOut} className="w-full flex items-center gap-3 p-3 text-rose-500 font-bold text-sm hover:bg-rose-50 rounded-xl transition-colors">
+                  <LogOut size={18} /> Sair do Sistema
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={view}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className={`max-w-7xl mx-auto ${view === 'schedule' ? 'h-full flex flex-col' : ''}`}
+          >
+            {view === 'dashboard' && <DashboardView servers={servers} masses={masses} unassigned={unassignedServers} stats={serverStats} setView={setView} seedBase={seedBase} isSeeding={isSeeding} />}
+            {view === 'members' && <MembersView servers={servers} onAdd={addServer} onDelete={removeServer} stats={serverStats} />}
+            {view === 'masses' && <MassesView masses={masses} onAdd={addMass} onDelete={removeMass} />}
+            {view === 'schedule' && <ScheduleView masses={masses} servers={servers} onToggle={toggleAssignment} stats={serverStats} autoSchedule={autoSchedule} clearSchedule={clearSchedule} />}
+          </motion.div>
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+// --- Internal Components ---
+
+function NavTab({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+        active ? 'bg-white text-indigo-700 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-800'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function NavButtonView({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-sm transition-colors ${
+        active ? 'bg-indigo-50 text-indigo-600' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function AuthView({ 
+  onEmailLogin, 
+  onEmailRegister, 
+  error 
+}: { 
+  onEmailLogin: (email: string, pass: string) => void,
+  onEmailRegister: (email: string, pass: string, name: string) => void,
+  error: string | null
+}) {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isRegistering) {
+      if (!name) return;
+      onEmailRegister(email, password, name);
+    } else {
+      onEmailLogin(email, password);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50 relative overflow-hidden font-sans">
+      {/* Decorative Orbs */}
+      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-indigo-500/10 rounded-full blur-[120px]" />
+      <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[100px]" />
+
+      <div className="flex-1 flex items-center justify-center p-6 relative z-10">
+        <div className="w-full max-w-md">
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-20 h-20 bg-indigo-700 rounded-[1.5rem] flex items-center justify-center text-white shadow-2xl shadow-indigo-200 mb-6 transform hover:rotate-3 transition-transform cursor-default relative">
+              <Church size={40} />
+              <div className="absolute -top-2 -right-2 bg-amber-400 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center text-indigo-900 shadow-sm">
+                <span className="text-[10px] font-black">MS</span>
+              </div>
+            </div>
+            <h1 className="text-3xl font-display font-black text-slate-900 tracking-tight text-center">Nossa Senhora da Abadia</h1>
+            <p className="text-slate-500 font-bold uppercase tracking-[0.2em] text-[10px] mt-2">Paróquia de Sidrolândia • MS</p>
+          </div>
+
+          <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-2xl p-8 space-y-6 backdrop-blur-sm bg-white/95 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none text-slate-400">
+              <MapPin size={100} />
+            </div>
+            
+            <div className="text-center space-y-1 relative z-10">
+              <h2 className="text-xl font-bold text-slate-800">{isRegistering ? 'Nova Conta Paroquial' : 'Portal do Altar'}</h2>
+              <p className="text-xs text-slate-400 font-medium leading-relaxed">
+                {isRegistering ? 'Cadastre a equipe da nossa paróquia.' : 'Acesse a gestão de acólitos e coroinhas da Abadia.'}
+              </p>
+            </div>
+
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="p-4 bg-rose-50 border border-rose-100 rounded-xl flex items-center gap-3 text-rose-600 text-xs font-bold"
+              >
+                <AlertCircle size={16} />
+                {error}
+              </motion.div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {isRegistering && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Seu Nome</label>
+                  <input 
+                    type="text"
+                    required
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner"
+                    placeholder="Ex: João Silva"
+                  />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
+                <input 
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner"
+                  placeholder="paroquia@exemplo.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
+                <input 
+                  type="password"
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner"
+                  placeholder="••••••••"
+                  minLength={6}
+                />
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3"
+              >
+                {isRegistering ? <UserPlus size={18} /> : <LogIn size={18} />}
+                {isRegistering ? 'Criar Cadastro' : 'Entrar no Sistema'}
+              </button>
+            </form>
+
+            <div className="text-center pt-2">
+              <button 
+                type="button"
+                onClick={() => setIsRegistering(!isRegistering)}
+                className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest transition-colors"
+              >
+                {isRegistering ? 'Já tem uma conta? Entre aqui' : 'Não tem uma conta exclusiva? Solicite acesso'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, isSeeding }: any) {
+  return (
+    <div className="space-y-10">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Global</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Dashboard</h1>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={seedBase}
+            disabled={isSeeding}
+            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-sm font-bold hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-wait"
+          >
+             {isSeeding ? <Loader2 className="animate-spin" size={18} /> : null}
+             {isSeeding ? 'Importando...' : 'Importar Base'}
+          </button>
+          <button onClick={() => setView('schedule')} className="group flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
+            <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> Montar Nova Escala
+          </button>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <StatCardV2 label="Servidores Ativos" value={servers.length} icon={<Users className="text-indigo-600" />} color="indigo" />
+        <StatCardV2 label="Missas Planejadas" value={masses.length} icon={<Church className="text-blue-600" />} color="blue" />
+        <StatCardV2 label="Pendências de Equilíbrio" value={unassigned.length} icon={<AlertCircle className="text-rose-600" />} color="rose" alert={unassigned.length > 0} />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        {/* Right Section: Alerts */}
+        <div className="glass-card rounded-2xl flex flex-col h-fit overflow-hidden">
+          <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <h2 className="text-sm font-black text-slate-700 uppercase tracking-wider">Alertas de Equilíbrio</h2>
+            {unassigned.length > 0 && <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-[10px] font-black rounded-lg">AÇÃO REQUERIDA</span>}
+          </div>
+          
+          <div className="p-6">
+            {unassigned.length > 0 ? (
+              <div className="space-y-5">
+                <div className="flex items-center gap-3 p-3 bg-rose-50 border border-rose-100 rounded-xl">
+                  <div className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span className="text-[11px] font-bold text-rose-700 uppercase tracking-tighter">Membros sem nenhuma participação</span>
+                </div>
+                <div className="space-y-1">
+                  {unassigned.slice(0, 5).map((s: any) => (
+                    <div key={s.id} className="group flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-indigo-200 transition-all shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 font-bold text-xs uppercase group-hover:bg-indigo-50 group-hover:text-indigo-600">
+                          {s.name[0]}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-800">{s.name}</p>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{s.type}</p>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-black text-rose-300 group-hover:text-rose-500 uppercase italic">Pendência</span>
+                    </div>
+                  ))}
+                  {unassigned.length > 5 && <p className="text-center text-[10px] text-slate-400 pt-2 font-bold uppercase tracking-widest">+ {unassigned.length - 5} outros membros</p>}
+                </div>
+                <button onClick={() => setView('schedule')} className="w-full mt-2 flex items-center justify-center gap-2 p-4 bg-slate-900 text-white rounded-xl font-bold text-xs tracking-[0.1em] uppercase hover:bg-slate-800 transition-all shadow-lg active:scale-95">
+                  Distribuir Escalas <ChevronRight size={14} />
+                </button>
+              </div>
+            ) : (
+                <div className="py-12 text-center">
+                  <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 mx-auto mb-4 border border-emerald-100">
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h3 className="font-bold text-slate-800">Equilibrio Perfeito</h3>
+                  <p className="text-xs text-slate-400 mt-2 px-6">Todos os servidores cadastrados possuem pelo menos uma escala ativa.</p>
+                </div>
+            )}
+          </div>
+        </div>
+
+        {/* Central Section: Statistics Charts/List */}
+        <div className="xl:col-span-2 glass-card rounded-2xl overflow-hidden">
+          <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+            <h2 className="text-sm font-black text-slate-700 uppercase tracking-wider">Frequência de Escalas</h2>
+            <button onClick={() => setView('members')} className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 uppercase tracking-widest transition-colors">Relatório Completo</button>
+          </div>
+          <div className="p-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
+               <FrequencyList title="Top Participantes" items={servers.sort((a:any, b:any) => (stats[b.id] || 0) - (stats[a.id] || 0)).slice(0, 4)} stats={stats} />
+               <FrequencyList title="Menor Participação" items={servers.sort((a:any, b:any) => (stats[a.id] || 0) - (stats[b.id] || 0)).slice(0, 4)} stats={stats} />
+            </div>
+            
+            <div className="mt-10 p-6 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between">
+              <div className="flex gap-6">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Média Mensal</span>
+                  <span className="text-2xl font-black text-slate-800">1.8 <span className="text-xs text-slate-300 font-bold uppercase tracking-wider">Escalas/Membro</span></span>
+                </div>
+                <div className="w-px h-10 bg-slate-200 mt-2" />
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Cobertura</span>
+                  <span className="text-2xl font-black text-slate-800">92% <span className="text-xs text-slate-300 font-bold uppercase tracking-wider">Vagas Preenchidas</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FrequencyList({ title, items, stats }: any) {
+  return (
+    <div className="space-y-5">
+      <h3 className="text-[11px] font-black text-slate-300 uppercase tracking-[0.2em]">{title}</h3>
+      <div className="space-y-4">
+        {items.map((s: any) => {
+          const count = stats[s.id] || 0;
+          return (
+            <div key={s.id} className="group flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-500 group-hover:bg-white group-hover:shadow-sm border border-transparent group-hover:border-slate-100 transition-all">
+                  {s.name[0]}
+                </div>
+                <span className="text-sm font-bold text-slate-700">{s.name}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full bg-indigo-500 rounded-full`} style={{ width: `${Math.min(count * 25, 100)}%` }} />
+                </div>
+                <span className="text-xs font-black font-mono text-slate-900 w-6">{count}x</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatCardV2({ label, value, icon, color, alert }: any) {
+  const themes: any = {
+    indigo: 'from-indigo-600/10 to-indigo-600/0 text-indigo-700',
+    blue: 'from-blue-600/10 to-blue-600/0 text-blue-700',
+    rose: 'from-rose-600/10 to-rose-600/0 text-rose-700',
+  };
+
+  return (
+    <div className={`glass-card p-6 overflow-hidden relative group hover:border-${color}-200/50 hover:-translate-y-1 cursor-default`}>
+       <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${themes[color]} rounded-bl-full z-0 opacity-40 group-hover:opacity-60 transition-opacity`} />
+       <div className="relative z-10">
+          <div className="flex justify-between items-start mb-6">
+            <div className="p-3 bg-white rounded-xl shadow-sm border border-slate-100 group-hover:border-indigo-100 group-hover:shadow-indigo-50 transition-all">
+              {icon}
+            </div>
+            {alert && <div className="w-3 h-3 bg-rose-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(244,63,94,0.5)]" />}
+          </div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
+          <p className="text-4xl font-display font-black text-slate-900 mt-1">{value}</p>
+       </div>
+    </div>
+  );
+}
+
+function MembersView({ servers, onAdd, onDelete, stats }: any) {
+  const [name, setName] = useState('');
+  const [type, setType] = useState<ServerRole>('coroinha');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onAdd(name, type);
+    setName('');
+  };
+
+  return (
+    <div className="space-y-8">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão de Pessoas</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Equipe Litúrgica</h1>
+        </div>
+        <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+           <button onClick={() => setType('acolito')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${type === 'acolito' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-800'}`}>Acólitos</button>
+           <button onClick={() => setType('coroinha')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${type === 'coroinha' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-800'}`}>Coroinhas</button>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1">
+          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-8">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                <UserPlus size={20} />
+              </div>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Novo Cadastro</h2>
+            </div>
+
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome Social / Completo</label>
+                <input 
+                  type="text" 
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Ex: Gabriel Martins"
+                  className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-100 focus:border-indigo-500 focus:bg-white focus:ring-0 outline-none transition-all font-semibold shadow-inner"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Função Canônica</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <RoleSelector active={type === 'acolito'} onClick={() => setType('acolito')} label="Acólito" />
+                  <RoleSelector active={type === 'coroinha'} onClick={() => setType('coroinha')} label="Coroinha" />
+                </div>
+              </div>
+
+              <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
+                <Plus size={18} /> Cadastrar Membro
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <div className="lg:col-span-2">
+          {servers.length === 0 ? (
+            <div className="h-96 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center px-10">
+              <Users size={64} className="text-slate-100 mb-6" />
+              <h3 className="text-xl font-bold text-slate-800">Nenhum membro ativo</h3>
+              <p className="text-sm text-slate-400 mt-2 max-w-xs">Comece cadastrando os primeiros coroinhas e acólitos no painel ao lado.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {servers.map((s: any) => (
+                <motion.div layout key={s.id} className="glass-card glass-card-hover p-4 flex items-center justify-between group">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg ${s.type === 'acolito' ? 'bg-indigo-600' : 'bg-blue-600'}`}>
+                      {s.name[0]}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors uppercase text-sm leading-none mb-1.5">{s.name}</h4>
+                      <div className="flex items-center gap-2">
+                         <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border uppercase tracking-widest ${s.type === 'acolito' ? 'bg-indigo-50 border-indigo-100 text-indigo-700' : 'bg-blue-50 border-blue-100 text-blue-700'}`}>
+                           {s.type}
+                         </span>
+                         <span className="text-[10px] font-mono font-bold text-slate-400">{stats[s.id] || 0} Missas</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <button onClick={() => onDelete(s.id)} className="p-2 text-slate-200 hover:text-rose-500 transition-colors group/trash">
+                      <Trash2 size={18} className="group-hover/trash:scale-110 transition-transform" />
+                    </button>
+                    <button className="p-2 text-slate-200 hover:text-indigo-600 transition-colors">
+                      <MoreVertical size={18} />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoleSelector({ active, onClick, label }: any) {
+  return (
+    <button 
+      type="button" 
+      onClick={onClick}
+      className={`p-4 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all ${
+        active ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100 scale-[1.02]' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function MassesView({ masses, onAdd, onDelete }: any) {
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [location, setLocation] = useState('Matriz Paroquial');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !date || !time) return;
+    onAdd(title, date, time, location);
+    setTitle('');
+    setDate('');
+    setTime('');
+  };
+
+  return (
+    <div className="space-y-8">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Agenda Litúrgica</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Celebrações</h1>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
+           <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                <Church size={20} />
+              </div>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Novo Evento</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Título da Missa</label>
+                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Missa de Solenidade" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-indigo-500 font-bold" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Data</label>
+                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
+                 </div>
+                 <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Horário</label>
+                    <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
+                 </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Localização</label>
+                <input type="text" value={location} onChange={e => setLocation(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
+              </div>
+              <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl">
+                 Agendar Missa
+              </button>
+            </div>
+        </form>
+
+        <div className="lg:col-span-2 space-y-4">
+           {masses.length === 0 ? (
+             <div className="h-64 flex flex-col items-center justify-center glass-card border-dashed">
+                <Calendar size={48} className="text-slate-100 mb-4" />
+                <p className="font-bold text-slate-400">Nenhuma celebração agendada.</p>
+             </div>
+           ) : (
+             masses.map((m: any) => (
+                <div key={m.id} className="glass-card glass-card-hover p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 group">
+                   <div className="flex items-center gap-6">
+                      <div className="w-16 h-16 bg-slate-800 rounded-2xl flex flex-col items-center justify-center text-white border-2 border-slate-700 shadow-lg shrink-0">
+                         <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-1 leading-none">{m.date.split('-')[1]}</span>
+                         <span className="text-2xl font-display font-black leading-none">{m.date.split('-')[2]}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-xl font-bold text-slate-900 tracking-tight leading-none mb-1 uppercase text-sm">{m.title}</h3>
+                        <div className="flex flex-wrap items-center gap-4 text-slate-400 text-[11px] font-bold uppercase tracking-widest">
+                           <div className="flex items-center gap-1.5"><Clock size={12} className="text-indigo-400" /> {m.time}</div>
+                           <div className="flex items-center gap-1.5"><MapPin size={12} className="text-indigo-400" /> {m.location}</div>
+                        </div>
+                      </div>
+                   </div>
+                   <div className="flex items-center md:flex-col md:items-end gap-4 md:gap-2">
+                      <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest md:mb-1">Participantes: {m.assignments.acolitos.length + m.assignments.coroinhas.length}</div>
+                      <button onClick={() => onDelete(m.id)} className="p-3 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
+                        <Trash2 size={20} />
+                      </button>
+                   </div>
+                </div>
+             ))
+           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule }: any) {
+  const [selectedMassId, setSelectedMassId] = useState<string | null>(masses[0]?.id || null);
+  const selectedMass = masses.find((m: any) => m.id === selectedMassId);
+
+  return (
+    <div className="space-y-8 flex-1 flex flex-col h-full overflow-hidden">
+      <header className="flex h-fit flex-col md:flex-row md:items-end justify-between gap-6 shrink-0">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Operação de Altar</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Montagem de Escala</h1>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={clearSchedule}
+            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all"
+          >
+             Limpar Tudo
+          </button>
+          <button 
+            onClick={autoSchedule}
+            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all"
+          >
+             <Layers size={16} /> Montagem Inteligente
+          </button>
+          <button 
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all"
+          >
+             <Download size={16} /> Exportar
+          </button>
+        </div>
+      </header>
+
+      {masses.length === 0 ? (
+         <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
+            <ClipboardList size={80} className="text-slate-100 mb-6" />
+            <h3 className="text-xl font-bold text-slate-800">Primeiro, agende as missas</h3>
+            <p className="text-sm text-slate-400 max-w-xs text-center mt-2 px-6">Para montar as escalas, você precisa ter missas cadastradas no sistema.</p>
+         </div>
+      ) : (
+        <div className="flex-1 min-h-0 flex flex-col gap-8">
+           {/* Horizonal Mass Selector */}
+           <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 no-scrollbar shrink-0">
+             {masses.map((m: any) => (
+               <button
+                 key={m.id}
+                 onClick={() => setSelectedMassId(m.id)}
+                 className={`group flex-shrink-0 w-[240px] p-5 rounded-[2rem] border transition-all text-left ${
+                   selectedMassId === m.id ? 'bg-white border-indigo-600 shadow-2xl shadow-indigo-100 ring-4 ring-indigo-50/50' : 'bg-white opacity-60 hover:opacity-100 border-slate-100'
+                 }`}
+               >
+                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 flex items-center justify-between">
+                   {m.date} <span className="text-slate-300">|</span> {m.time}
+                 </p>
+                 <h4 className="text-base font-bold text-slate-900 leading-tight mb-4 min-h-[2.5rem] line-clamp-2 uppercase tracking-tight">{m.title}</h4>
+                 <div className="flex -space-x-2">
+                    {Array.from({ length: Math.min(m.assignments.acolitos.length + m.assignments.coroinhas.length, 6) }).map((_, i) => (
+                      <div key={i} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-black text-indigo-600">
+                        {i + 1}
+                      </div>
+                    ))}
+                    {(m.assignments.acolitos.length + m.assignments.coroinhas.length) > 6 && (
+                      <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-white flex items-center justify-center text-[8px] font-black text-white">
+                        +{ (m.assignments.acolitos.length + m.assignments.coroinhas.length) - 6 }
+                      </div>
+                    )}
+                    {m.assignments.acolitos.length + m.assignments.coroinhas.length === 0 && (
+                      <div className="w-full text-[10px] font-black text-slate-300 uppercase italic tracking-widest text-center mt-2 border border-dashed border-slate-100 py-1.5 rounded-lg">Sem escala</div>
+                    )}
+                 </div>
+               </button>
+             ))}
+           </div>
+
+           {selectedMass && (
+             <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-4 gap-8 overflow-hidden">
+                {/* Available List (Sidebar inside content) */}
+                <aside className="xl:col-span-1 glass-card flex flex-col overflow-hidden">
+                   <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center shrink-0">
+                      <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Disponíveis</h2>
+                      <span className="text-[10px] font-black bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full">{servers.length} TOTAL</span>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scroll">
+                      {/* Priority Alert Box */}
+                      {servers.some((s:any) => stats[s.id] === 0) && (
+                        <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl flex items-center gap-3">
+                           <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shadow-[0_0_8px_rgba(244,63,94,0.6)]" />
+                           <span className="text-[10px] font-black text-rose-700 uppercase leading-none">Prioridade: 0 escalas</span>
+                        </div>
+                      )}
+                      
+                      <div className="space-y-2">
+                        {servers.sort((a:any, b:any) => (stats[a.id] || 0) - (stats[b.id] || 0)).map((s: any) => {
+                          const count = stats[s.id] || 0;
+                          const isAssigned = selectedMass.assignments.acolitos.includes(s.id) || selectedMass.assignments.coroinhas.includes(s.id);
+                          return (
+                            <button
+                              key={s.id}
+                              onClick={() => onToggle(selectedMass.id, s.id, s.type)}
+                              className={`w-full group flex items-center justify-between p-3 rounded-xl border transition-all text-left shadow-sm ${
+                                isAssigned 
+                                  ? 'bg-indigo-600 border-indigo-600 text-white' 
+                                  : 'bg-white border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 text-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] uppercase shadow-sm ${
+                                  isAssigned ? 'bg-white/20 text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600'
+                                }`}>
+                                  {s.name[0]}
+                                </div>
+                                <div>
+                                  <p className="text-xs font-bold leading-none mb-1">{s.name}</p>
+                                  <p className={`text-[8px] font-black uppercase tracking-widest leading-none ${isAssigned ? 'text-indigo-200' : 'text-slate-300'}`}>{s.type}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                 {count === 0 && !isAssigned && <span className="text-[8px] font-black text-rose-500 uppercase italic">Nunca</span>}
+                                 <span className={`text-[10px] font-mono font-bold ${isAssigned ? 'text-white/60' : 'text-slate-300'}`}>{count}x</span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                   </div>
+                </aside>
+
+                {/* Main Schedule Board */}
+                <section className="xl:col-span-3 flex flex-col gap-6 overflow-hidden">
+                   <div className="glass-card flex-1 flex flex-col overflow-hidden bg-white">
+                      <div className="p-6 border-b border-slate-100 bg-slate-50/50 shrink-0">
+                         <div className="flex justify-between items-start">
+                            <div>
+                               <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.25em] mb-2">{selectedMass.date} • {selectedMass.time}</p>
+                               <h3 className="text-2xl font-display font-black text-slate-900 tracking-tight leading-none uppercase">{selectedMass.title}</h3>
+                               <p className="text-xs text-slate-500 mt-2 font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-60">
+                                 <MapPin size={12} className="text-indigo-400" /> {selectedMass.location}
+                               </p>
+                            </div>
+                            <div className="bg-indigo-600 text-white p-3 rounded-2xl shadow-xl shadow-indigo-100">
+                               <Church size={24} />
+                            </div>
+                         </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto p-8 custom-scroll">
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                            {/* Acolitos Section */}
+                            <div className="space-y-6">
+                               <div className="flex justify-between items-center pb-2 border-b-2 border-slate-50">
+                                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Acólitos ({selectedMass.assignments.acolitos.length})</h4>
+                                  <Plus size={14} className="text-slate-300" />
+                               </div>
+                               <div className="space-y-3">
+                                  {selectedMass.assignments.acolitos.length === 0 ? (
+                                    <div className="p-10 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center opacity-40">
+                                       <Users size={32} className="text-slate-100 mb-3" />
+                                       <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Nenhum Escalado</span>
+                                    </div>
+                                  ) : (
+                                    selectedMass.assignments.acolitos.map((id: string) => {
+                                      const s = servers.find((serv: any) => serv.id === id);
+                                      return (
+                                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} key={id} className="group relative flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-white hover:shadow-xl hover:shadow-indigo-50/50 transition-all">
+                                           <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-black shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                             {s?.name[0]}
+                                           </div>
+                                           <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-bold text-slate-900 truncate">{s?.name}</p>
+                                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Acólito Escalado</p>
+                                           </div>
+                                           <button onClick={() => onToggle(selectedMass.id, id, 'acolito')} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
+                                              <X size={18} />
+                                           </button>
+                                        </motion.div>
+                                      );
+                                    })
+                                  )}
+                               </div>
+                            </div>
+
+                            {/* Coroinhas Section */}
+                            <div className="space-y-6">
+                               <div className="flex justify-between items-center pb-2 border-b-2 border-slate-50">
+                                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Coroinhas ({selectedMass.assignments.coroinhas.length})</h4>
+                                  <Plus size={14} className="text-slate-300" />
+                               </div>
+                               <div className="grid gap-3">
+                                  {selectedMass.assignments.coroinhas.length === 0 ? (
+                                    <div className="p-10 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center opacity-40">
+                                       <Users size={32} className="text-slate-100 mb-3" />
+                                       <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Nenhum Escalado</span>
+                                    </div>
+                                  ) : (
+                                    selectedMass.assignments.coroinhas.map((id: string) => {
+                                      const s = servers.find((serv: any) => serv.id === id);
+                                      return (
+                                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} key={id} className="group flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-white hover:shadow-xl hover:shadow-indigo-50/50 transition-all">
+                                           <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-black shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                             {s?.name[0]}
+                                           </div>
+                                           <div className="flex-1 min-w-0">
+                                              <p className="text-sm font-bold text-slate-900 truncate">{s?.name}</p>
+                                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Coroinha Escalado</p>
+                                           </div>
+                                           <button onClick={() => onToggle(selectedMass.id, id, 'coroinha')} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
+                                              <X size={18} />
+                                           </button>
+                                        </motion.div>
+                                      );
+                                    })
+                                  )}
+                               </div>
+                            </div>
+                         </div>
+                      </div>
+
+                      {/* Distribution Footer */}
+                      <div className="h-16 bg-slate-900 rounded-b-xl flex items-center justify-between px-8 text-white shrink-0">
+                         <div className="flex items-center gap-6">
+                            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-500">RESUMO DA ESCALA</span>
+                            <div className="flex gap-1">
+                               {Array.from({ length: selectedMass.assignments.acolitos.length + selectedMass.assignments.coroinhas.length }).map((_, i) => (
+                                 <div key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.6)]" />
+                               ))}
+                            </div>
+                         </div>
+                         <div className="flex items-center gap-6 text-[10px] font-black uppercase tracking-widest">
+                            <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Balanço Estável</span>
+                            <span className="text-slate-500">{selectedMass.assignments.acolitos.length + selectedMass.assignments.coroinhas.length} Total</span>
+                         </div>
+                      </div>
+                   </div>
+                </section>
+             </div>
+           )}
+        </div>
+      )}
+    </div>
+  );
+}
