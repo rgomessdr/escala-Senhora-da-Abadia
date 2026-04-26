@@ -53,7 +53,7 @@ export const checkSupabaseConnection = async () => {
 // Database Helpers
 export const db = {
   servers: {
-    list: (userId: string) => supabase.from('servers').select('*').eq('owner_id', userId),
+    list: () => supabase.from('servers').select('*'),
     insert: (data: any) => {
       const items = Array.isArray(data) ? data : [data];
       const payload = items.map((item: any) => ({
@@ -80,7 +80,7 @@ export const db = {
     delete: (id: string) => supabase.from('servers').delete().eq('id', id),
   },
   communities: {
-    list: (userId: string) => supabase.from('communities').select('*').eq('owner_id', userId),
+    list: () => supabase.from('communities').select('*'),
     insert: (data: any) => {
       const items = Array.isArray(data) ? data : [data];
       const payload = items.map(item => ({
@@ -93,7 +93,7 @@ export const db = {
     delete: (id: string) => supabase.from('communities').delete().eq('id', id),
   },
   masses: {
-    list: (userId: string) => supabase.from('masses').select('*').eq('owner_id', userId),
+    list: () => supabase.from('masses').select('*'),
     insert: (data: any) => {
       const items = Array.isArray(data) ? data : [data];
       const payload = items.map((item: any) => ({

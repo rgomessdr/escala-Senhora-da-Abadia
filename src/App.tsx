@@ -101,15 +101,15 @@ ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE masses ENABLE ROW LEVEL SECURITY;
 
--- 3. Políticas
+-- 3. Políticas (BANCO ÚNICO - TODOS VEEM TUDO)
 DROP POLICY IF EXISTS "Acesso Total Servidores" ON servers;
-CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (auth.uid() = owner_id);
+CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Acesso Total Comunidades" ON communities;
-CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (auth.uid() = owner_id);
+CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (auth.role() = 'authenticated');
 
 DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
-CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (auth.uid() = owner_id);`;
+CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (auth.role() = 'authenticated');`;
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -226,9 +226,9 @@ export default function App() {
     
     try {
       const [serversRes, massesRes, communitiesRes] = await Promise.all([
-        sdb.servers.list(user.id),
-        sdb.masses.list(user.id),
-        sdb.communities.list(user.id)
+        sdb.servers.list(),
+        sdb.masses.list(),
+        sdb.communities.list()
       ]);
 
       if (serversRes.error) throw serversRes.error;
