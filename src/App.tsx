@@ -74,14 +74,14 @@ CREATE TABLE IF NOT EXISTS servers (
   email TEXT,
   whatsapp TEXT,
   birth_date DATE,
-  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  owner_id UUID,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS communities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  owner_id UUID,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS masses (
   time TIME NOT NULL,
   location TEXT NOT NULL,
   assignments JSONB DEFAULT '{"acolitos": [], "coroinhas": []}'::JSONB,
-  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  owner_id UUID,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -103,13 +103,13 @@ ALTER TABLE masses ENABLE ROW LEVEL SECURITY;
 
 -- 3. Políticas (BANCO ÚNICO - TODOS VEEM TUDO)
 DROP POLICY IF EXISTS "Acesso Total Servidores" ON servers;
-CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Acesso Total Comunidades" ON communities;
-CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (auth.role() = 'authenticated');
+CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
-CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (auth.role() = 'authenticated');`;
+CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true);`;
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -139,9 +139,11 @@ export default function App() {
     
     // Validar e-mail localmente antes de tentar login (opcional, mas bom para UX)
     const normalizedEmail = email.trim().toLowerCase();
-    if (!AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase()).includes(normalizedEmail)) {
+    const authorized = AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase());
+    
+    if (!authorized.includes(normalizedEmail)) {
       console.warn("Bloqueio de Email:", normalizedEmail);
-      setAuthError('Este e-mail não tem permissão para acessar o sistema.');
+      setAuthError(`O e-mail "${normalizedEmail}" não está na lista de administradores autorizados. Verifique se o e-mail está correto no código ou nas configurações.`);
       return;
     }
 
@@ -760,6 +762,7 @@ export default function App() {
               </p>
               <ol className="text-xs text-slate-500 space-y-2 list-decimal ml-4 font-bold">
                 <li>Acesse o painel do Supabase do seu projeto.</li>
+                <li className="text-red-500 underline">VERIFIQUE se o seu projeto é: {import.meta.env.VITE_SUPABASE_URL || 'Projeto Padrão (pgfjgvtzvwtrlhhvcomg)'}</li>
                 <li>No menu lateral, clique em <span className="text-indigo-600">SQL Editor</span>.</li>
                 <li>Clique em <span className="text-indigo-600">New Query</span>.</li>
                 <li>Cole o código abaixo e clique em <span className="text-indigo-600 font-extrabold underline">RUN</span>.</li>
