@@ -25,7 +25,12 @@ import {
   Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import * as pdfjsLib from 'pdfjs-dist';
+import { GoogleGenAI, Type } from "@google/genai";
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 import { Server, Mass, View, ServerRole } from './types';
 import { User } from '@supabase/supabase-js';
 
@@ -145,8 +150,12 @@ export default function App() {
         assignments: m.assignments,
         ownerId: m.owner_id
       })));
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching data:", err);
+      // Tratar erro de permissão (RLS)
+      if (err.code === '42501' || err.message?.includes('permission denied') || err.message?.includes('Forbidden')) {
+        alert("⚠️ ERRO DE PERMISSÃO: Você precisa configurar as Políticas (RLS) no Supabase. Vá em 'Autentication' -> 'Policies' e libere as tabelas 'servers' e 'masses' para usuários logados.");
+      }
     }
   };
 
@@ -187,6 +196,133 @@ export default function App() {
   }, [servers, serverStats]);
 
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isImportingDoc, setIsImportingDoc] = useState(false);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsImportingDoc(true);
+    try {
+      let textContent = "";
+
+      if (file.type === 'application/pdf') {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items.map((item: any) => item.str);
+          textContent += strings.join(" ") + "\n";
+        }
+      } else {
+        textContent = await file.text();
+      }
+
+      if (!textContent.trim()) {
+        throw new Error("Não foi possível extrair texto do documento.");
+      }
+
+      // 🔑 Call Gemini to parse
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Analise este texto de uma escala paroquial e extraia os dados estruturados.
+        
+        Texto extraído:
+        """
+        ${textContent}
+        """`,
+        config: {
+          systemInstruction: "Você é um assistente de gestão paroquial. Extraia: 1. Lista de servidores (nome e tipo: 'acolito' ou 'coroinha'). 2. Lista de missas (título, data no formato YYYY-MM-DD, hora HH:MM, local, e nomes dos acolitos e coroinhas escalados). Use JSON puro.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              servers: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    type: { type: Type.STRING, enum: ["acolito", "coroinha"] }
+                  },
+                  required: ["name", "type"]
+                }
+              },
+              masses: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    date: { type: Type.STRING },
+                    time: { type: Type.STRING },
+                    location: { type: Type.STRING },
+                    acolitos: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    coroinhas: { type: Type.ARRAY, items: { type: Type.STRING } }
+                  },
+                  required: ["title", "date", "time", "location", "acolitos", "coroinhas"]
+                }
+              }
+            },
+            required: ["servers", "masses"]
+          }
+        }
+      });
+
+      const data = JSON.parse(response.text || '{}');
+      if (!data.servers || !data.masses) throw new Error("A IA não conseguiu identificar os dados corretamente.");
+
+      // --- Sync with Database ---
+      const nameToId: Record<string, string> = {};
+      servers.forEach(s => nameToId[s.name.trim().toLowerCase()] = s.id);
+
+      // 1. Insert missing servers
+      const newServers = data.servers.filter((s: any) => !nameToId[s.name.trim().toLowerCase()]);
+      if (newServers.length > 0) {
+        const { data: insertedServers, error: sError } = await sdb.servers.insert(
+          newServers.map((s: any) => ({ 
+            name: s.name.trim(), 
+            type: s.type, 
+            active: true, 
+            owner_id: user.id 
+          }))
+        );
+        if (sError) throw sError;
+        insertedServers?.forEach(s => nameToId[s.name.trim().toLowerCase()] = s.id);
+      }
+
+      // 2. Insert masses
+      const massesToInsert = data.masses.map((m: any) => ({
+        title: m.title,
+        date: m.date,
+        time: m.time,
+        location: m.location,
+        assignments: {
+          acolitos: m.acolitos.map((name: string) => nameToId[name.trim().toLowerCase()]).filter(Boolean),
+          coroinhas: m.coroinhas.map((name: string) => nameToId[name.trim().toLowerCase()]).filter(Boolean)
+        },
+        ownerId: user.id
+      }));
+
+      if (massesToInsert.length > 0) {
+        const { error: mError } = await sdb.masses.insert(massesToInsert);
+        if (mError) throw mError;
+      }
+
+      alert(`Sucesso! Importados ${data.servers.length} servidores e ${data.masses.length} missas.`);
+      fetchData();
+
+    } catch (err: any) {
+      console.error("Erro no processamento:", err);
+      alert("Erro ao ler documento: " + err.message);
+    } finally {
+      setIsImportingDoc(false);
+      event.target.value = '';
+    }
+  };
 
   // Seeding
   const seedBase = async () => {
@@ -364,9 +500,13 @@ export default function App() {
       }
       
       alert("Base de dados REAL de Abril 2026 importada com sucesso!");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao importar base:", err);
-      alert("Houve um erro ao importar a base. Verifique sua conexão.");
+      if (err.code === '42501' || err.message?.includes('permission denied') || err.message?.includes('Forbidden')) {
+        alert("⚠️ ERRO DE PERMISSÃO: O Supabase bloqueou a gravação. Você precisa rodar o script SQL de Permissões (Policies/RLS) no console do Supabase para liberar as tabelas 'servers' e 'masses'.");
+      } else {
+        alert("Houve um erro ao importar a base: " + (err.message || "Verifique sua conexão."));
+      }
     } finally {
       setIsSeeding(false);
     }
@@ -954,6 +1094,21 @@ function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, 
             >
                {isDeleting ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
                {isDeleting ? 'Excluindo...' : 'Limpar Dados'}
+            </button>
+            <button 
+              onClick={() => document.getElementById('pdf-upload')?.click()}
+              disabled={isImportingDoc || isDeleting || isSeeding}
+              className="flex items-center gap-2 px-5 py-3 bg-white border border-emerald-200 text-emerald-600 rounded-xl text-sm font-bold hover:bg-emerald-50 transition-all disabled:opacity-50"
+            >
+               {isImportingDoc ? <Loader2 className="animate-spin" size={18} /> : <Share2 size={18} />}
+               {isImportingDoc ? 'Lendo...' : 'Importar PDF/Doc'}
+               <input 
+                 id="pdf-upload" 
+                 type="file" 
+                 accept=".pdf,.txt" 
+                 className="hidden" 
+                 onChange={handleFileUpload} 
+               />
             </button>
             <button 
               onClick={seedBase}
