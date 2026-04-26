@@ -22,8 +22,6 @@ import {
   Download,
   MoreVertical,
   Layers,
-  Github,
-  Globe,
   Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -813,22 +811,6 @@ function DashboardView({ servers, masses, unassigned, stats, setView, seedBase, 
           <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Dashboard</h1>
         </div>
           <div className="flex gap-3">
-            <a 
-              href="https://github.com" 
-              target="_blank" 
-              rel="noreferrer"
-              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all border border-slate-200"
-            >
-               <Github size={12} /> GitHub
-            </a>
-            <a 
-              href="https://vercel.com" 
-              target="_blank" 
-              rel="noreferrer"
-              className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all border border-slate-200"
-            >
-               <Globe size={12} /> Vercel
-            </a>
             <button 
               onClick={seedBase}
               disabled={isSeeding}
