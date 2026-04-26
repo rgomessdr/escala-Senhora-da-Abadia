@@ -55,8 +55,7 @@ export const db = {
   servers: {
     list: (userId: string) => supabase.from('servers').select('*').eq('owner_id', userId),
     insert: (data: any) => {
-      const isArray = Array.from(data).length !== undefined && typeof data !== 'string';
-      const items = isArray ? data : [data];
+      const items = Array.isArray(data) ? data : [data];
       const payload = items.map((item: any) => ({
         name: item.name,
         type: item.type,
@@ -96,8 +95,7 @@ export const db = {
   masses: {
     list: (userId: string) => supabase.from('masses').select('*').eq('owner_id', userId),
     insert: (data: any) => {
-      const isArray = Array.from(data).length !== undefined && typeof data !== 'string';
-      const items = isArray ? data : [data];
+      const items = Array.isArray(data) ? data : [data];
       const payload = items.map((item: any) => ({
         title: item.title,
         date: item.date,
