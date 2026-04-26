@@ -1,56 +1,42 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://pgfjgvtzvwtrlhhvcomg.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnZmpndnR6dnd0cmxoaHZjb21nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzIwNDkyMiwiZXhwIjoyMDkyNzgwOTIyfQ.HBPRBuCJfx7cNoGbI0r5KubPvTj1wEpPjneTvTIIn9A';
 
-// If configuration is missing, we alert in the console and provide a placeholder
-// to prevent the app from completely crashing on boot, though features will fail.
-if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('eyJ') || supabaseAnonKey.length < 20) {
-  console.error(
-    "⚠️ CONFIGURAÇÃO INCORRETA NO PAINEL SECRETS!\n\n" +
-    "Acesse: Engrenagem (Settings) -> Secrets\n" +
-    "Configure estas 2 chaves exatamente:\n\n" +
-    "1. Nome: VITE_SUPABASE_URL\n" +
-    "   Valor: (O seu 'Project URL' do Supabase, ex: https://xyz.supabase.co)\n\n" +
-    "2. Nome: VITE_SUPABASE_ANON_KEY\n" +
-    "   Valor: (O seu 'anon public' key)\n\n" +
-    "💡 DICA: No Supabase, vá em Settings -> API para encontrar esses valores.\n" +
-    "Não esqueça de clicar em 'APLICAR ALTERAÇÕES' no final do painel de segredos."
-  );
+// If configuration is missing, we alert in the console
+if (!supabaseUrl && !supabaseAnonKey) {
+  console.warn("⚠️ Usando chaves padrão do Supabase. Para segurança, configure o painel 'Secrets'.");
 }
 
 // Support for providing just the project ID or full URLs
-const cleanUrl = supabaseUrl?.trim()
-  .replace(/\/rest\/v1\/?$/, '') // Remove suffix if present
-  .replace(/\/$/, ''); // Remove trailing slash
+const cleanUrl = (supabaseUrl || '').trim()
+  .replace(/\/rest\/v1\/?$/, '') 
+  .replace(/\/$/, '');
 
 const finalUrl = cleanUrl.includes('.') 
   ? (cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`)
   : (cleanUrl ? `https://${cleanUrl}.supabase.co` : 'https://placeholder-project.supabase.co');
 
-console.log("🔌 Supabase Initializing with URL:", finalUrl);
+const cleanKey = (supabaseAnonKey || '').trim();
 
-export const supabase = createClient(finalUrl, supabaseAnonKey?.trim() || 'placeholder-key');
+export const supabase = createClient(finalUrl, cleanKey || 'placeholder-key');
 
 export const checkSupabaseConnection = async () => {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return { success: false, message: "Faltam as chaves no painel Secrets" };
-  }
   try {
     // Tenta uma busca simples para validar a conexão
     const { error } = await supabase.from('servers').select('count', { count: 'exact', head: true });
     
     if (error) {
        // Se o erro for 'PGRST116' (no rows) ou sucesso sem erro, está OK.
-       // 'PGRST204' (relation does not exist) significa que a chave está OK mas as tabelas não foram criadas.
+       // 'PGRST204' (relation does not exist) significa que a chave está OK mas as tabelas não foram criadas no SQL Editor.
        if (error.code === 'PGRST204') {
-         return { success: true, message: "Conectado! (Aviso: Tabelas não encontradas)" };
+         return { success: false, message: "Conectado! Mas as tabelas (servers/masses) ainda não foram criadas no SQL Editor do Supabase." };
        }
        
        console.warn("Erro de conexão Supabase:", error.message, error.code);
        return { success: false, message: `Erro ${error.code}: ${error.message}` };
     }
-    return { success: true, message: "Conectado com sucesso!" };
+    return { success: true, message: "Tudo pronto! Banco de dados conectado." };
   } catch (err: any) {
     return { success: false, message: "Erro de rede ou URL inválida" };
   }
