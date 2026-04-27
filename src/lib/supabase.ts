@@ -32,15 +32,21 @@ export const checkSupabaseConnection = async () => {
   }
 
   try {
-    // Tenta uma busca simples para validar a conexão
-    const { error: serverError } = await supabase.from('servers').select('count', { count: 'exact', head: true });
-    
-    if (serverError) {
-      console.error("Erro Supabase:", serverError);
-      if (serverError.code === 'PGRST204' || serverError.message?.includes('not found') || serverError.code === '42P01') {
-        return { success: false, message: "Tabelas não encontradas. Clique no 'Erro DB' no topo e siga instruções SQL." };
+    // Tenta uma busca simples em cada tabela para validar a existência do schema
+    const results = await Promise.all([
+      supabase.from('servers').select('count', { count: 'exact', head: true }),
+      supabase.from('masses').select('count', { count: 'exact', head: true }),
+      supabase.from('communities').select('count', { count: 'exact', head: true })
+    ]);
+
+    for (const { error } of results) {
+      if (error) {
+        console.error("Erro detectado no banco:", error);
+        if (error.code === 'PGRST204' || error.message?.includes('not found') || error.code === '42P01') {
+          return { success: false, message: "TABELAS FALTANDO: Você precisa rodar o script SQL no painel do Supabase." };
+        }
+        return { success: false, message: `Erro DB: ${error.message} (${error.code})` };
       }
-      return { success: false, message: `Erro: ${serverError.message} (${serverError.code})` };
     }
 
     return { success: true, message: "Tudo pronto! Banco de dados conectado." };

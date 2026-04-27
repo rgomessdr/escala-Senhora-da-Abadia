@@ -288,11 +288,11 @@ export default function App() {
     if (!user) return;
 
     const serversSub = supabase.channel('servers-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'servers', filter: `owner_id=eq.${user.id}` }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'servers' }, () => fetchData())
       .subscribe();
 
     const massesSub = supabase.channel('masses-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'masses', filter: `owner_id=eq.${user.id}` }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'masses' }, () => fetchData())
       .subscribe();
 
     return () => {
@@ -326,13 +326,13 @@ export default function App() {
     setIsDeleting(true);
     try {
       // Usar sdb para deletar tudo (ou via supabase direto se preferir, mas sdb é mais consistente)
-      const { error: massErr } = await supabase.from('masses').delete().eq('owner_id', user.id);
+      const { error: massErr } = await supabase.from('masses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       if (massErr) throw massErr;
 
-      const { error: serverErr } = await supabase.from('servers').delete().eq('owner_id', user.id);
+      const { error: serverErr } = await supabase.from('servers').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       if (serverErr) throw serverErr;
 
-      const { error: commErr } = await supabase.from('communities').delete().eq('owner_id', user.id);
+      const { error: commErr } = await supabase.from('communities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       if (commErr) throw commErr;
       
       alert("Todos os dados foram excluídos com sucesso.");
