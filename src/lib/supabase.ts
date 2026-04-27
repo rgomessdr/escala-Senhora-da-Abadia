@@ -42,8 +42,14 @@ export const checkSupabaseConnection = async () => {
     for (const { error } of results) {
       if (error) {
         console.error("Erro detectado no banco:", error);
-        if (error.code === 'PGRST204' || error.message?.includes('not found') || error.code === '42P01') {
+        // PGRST204 = Table not found
+        // 42P01 = Relation not found (Postgres code)
+        if (error.code === 'PGRST204' || error.code === '42P01') {
           return { success: false, message: "TABELAS FALTANDO: Você precisa rodar o script SQL no painel do Supabase." };
+        }
+        // If it's a 400 with a message about columns, it might be that the table exists but schema changed
+        if (error.status === 400 || error.code === 'PGRST106') {
+          return { success: false, message: "ERRO DE SCHEMA: Rode o script SQL novamente para atualizar as tabelas." };
         }
         return { success: false, message: `Erro DB: ${error.message} (${error.code})` };
       }

@@ -66,24 +66,29 @@ const AUTHORIZED_EMAILS = [
   'rodrigogomessdr@gmail.com'
 ];
 
-const SETUP_SQL = `-- EXECUTE ESTE SQL NO SQL EDITOR DO SUPABASE
--- 1. Tabelas
+const SETUP_SQL = `-- ⚠️ ATENÇÃO: Se você já rodou um script antes e está dando erro, 
+-- descomente as 3 linhas abaixo (remova os --) para limpar e recriar:
+-- DROP TABLE IF EXISTS masses;
+-- DROP TABLE IF EXISTS servers;
+-- DROP TABLE IF EXISTS communities;
+
+-- 1. Criação das Tabelas
 CREATE TABLE IF NOT EXISTS servers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('acólito', 'coroinha')),
+  type TEXT NOT NULL CHECK (type IN ('acolito', 'coroinha')),
   active BOOLEAN DEFAULT TRUE,
   email TEXT,
   whatsapp TEXT,
   birth_date DATE,
-  owner_id UUID,
+  owner_id UUID DEFAULT auth.uid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS communities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  owner_id UUID,
+  owner_id UUID DEFAULT auth.uid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -94,7 +99,7 @@ CREATE TABLE IF NOT EXISTS masses (
   time TIME NOT NULL,
   location TEXT NOT NULL,
   assignments JSONB DEFAULT '{"acolitos": [], "coroinhas": []}'::JSONB,
-  owner_id UUID,
+  owner_id UUID DEFAULT auth.uid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -103,15 +108,15 @@ ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE masses ENABLE ROW LEVEL SECURITY;
 
--- 3. Políticas (BANCO ÚNICO - TODOS VEEM TUDO)
+-- 3. Políticas (TODOS VEEM TUDO E TODOS EDITAM TUDO PARA TESTES)
 DROP POLICY IF EXISTS "Acesso Total Servidores" ON servers;
-CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (true);
+CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Acesso Total Comunidades" ON communities;
-CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (true);
+CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
-CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true);`;
+CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true) WITH CHECK (true);`;
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
