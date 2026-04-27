@@ -47,10 +47,12 @@ function handleSupabaseError(error: any, operationType: OperationType, path: str
   
   let msg = `Erro no banco de dados (${operationType}): ${error.message || 'Erro desconhecido'}`;
   
-  if (error.code === 'PGRST204') {
+  if (error.code === 'PGRST204' || error.code === '42P01') {
     msg = `⚠️ Erro Crítico: A tabela '${path}' não existe no Supabase. \n\nVocê precisa executar o comando SQL no painel do Supabase para criar as tabelas.`;
   } else if (error.code === '42501') {
     msg = `⚠️ Erro de Permissão (RLS): Você não tem permissão para realizar esta ação na tabela '${path}'.`;
+  } else if (error.code === 'PGRST301' || error.status === 401 || error.status === 403) {
+    msg = `⚠️ Erro de Autenticação: Sua chave do Supabase (ANON KEY) é inválida ou expirou. \n\nVerifique se você não colou uma chave do CLERK (que começa com sb_publishable) por engano.`;
   }
   
   alert(msg);
@@ -135,7 +137,7 @@ export default function App() {
 
     checkSupabaseConnection().then((res) => {
       setConnStatus(res);
-      if (!res.success && res.message.includes('não encontrada')) {
+      if (!res.success && (res.message.includes('não encontrada') || res.message.includes('INVÁLIDA'))) {
         setShowSqlSetup(true);
       }
     });
@@ -673,9 +675,17 @@ export default function App() {
               Abadia Sidrolândia
               {connStatus && (
                 <div 
-                  className={`w-2 h-2 rounded-full ${connStatus.success ? 'bg-emerald-500' : 'bg-rose-500'} animate-pulse`} 
+                  className={`flex items-center gap-2 px-2 py-1 rounded-full text-[10px] uppercase font-bold tracking-tight transition-all cursor-help border ${
+                    connStatus.success 
+                      ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+                      : 'bg-rose-50 text-rose-600 border-rose-100 animate-bounce hover:bg-rose-100'
+                  }`}
+                  onClick={() => !connStatus.success && setShowSqlSetup(true)}
                   title={connStatus.message}
-                />
+                >
+                  <div className={`w-2 h-2 rounded-full ${connStatus.success ? 'bg-emerald-500' : 'bg-rose-500'} animate-pulse`} />
+                  {connStatus.success ? 'Conectado' : 'Erro DB'}
+                </div>
               )}
             </h1>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Gestão de Escalas • MS</p>

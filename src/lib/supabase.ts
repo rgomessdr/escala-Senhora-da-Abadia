@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL_URL || 'https://pgfjgvtzvwtrlhhvcomg.supabase.co';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://pgfjgvtzvwtrlhhvcomg.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnZmpndnR6dnd0cmxoaHZjb21nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzIwNDkyMiwiZXhwIjoyMDkyNzgwOTIyfQ.HBPRBuCJfx7cNoGbI0r5KubPvTj1wEpPjneTvTIIn9A';
 
 // If configuration is missing, we alert in the console
-if (!supabaseUrl && !supabaseAnonKey) {
+if (!supabaseUrl || !supabaseAnonKey) {
   console.warn("⚠️ Usando chaves padrão do Supabase. Para segurança, configure o painel 'Secrets'.");
 }
 
@@ -19,34 +19,33 @@ const finalUrl = cleanUrl.includes('.')
 
 const cleanKey = (supabaseAnonKey || '').trim();
 
+// Security Warning for Clerk Keys
+if (cleanKey.startsWith('sb_publishable_') || cleanKey.startsWith('pk_')) {
+  console.error("CRITICAL: A chave fornecida parece ser do CLERK, não do SUPABASE. O Supabase Anon Key sempre começa com 'eyJ'.");
+}
+
 export const supabase = createClient(finalUrl, cleanKey || 'placeholder-key');
 
 export const checkSupabaseConnection = async () => {
-  try {
-    // Tenta uma busca simples para validar a conexão em todas as tabelas principais
-    const { error: serverError } = await supabase.from('servers').select('count', { count: 'exact', head: true });
-    const { error: massError } = await supabase.from('masses').select('count', { count: 'exact', head: true });
-    const { error: communityError } = await supabase.from('communities').select('count', { count: 'exact', head: true });
-    
-    if (serverError && serverError.code === 'PGRST204') {
-      return { success: false, message: "Tabela 'servers' não encontrada. Execute o SQL Script." };
-    }
-    if (massError && massError.code === 'PGRST204') {
-      return { success: false, message: "Tabela 'masses' não encontrada. Execute o SQL Script." };
-    }
-    if (communityError && communityError.code === 'PGRST204') {
-      return { success: false, message: "Tabela 'communities' não encontrada. Execute o SQL Script no Supabase." };
-    }
+  if (cleanKey.startsWith('sb_publishable_') || cleanKey.startsWith('pk_')) {
+    return { success: false, message: "CHAVE INVÁLIDA: Você usou uma chave do Clerk no lugar da chave do Supabase. Use a 'anon/public' key (JWT) que começa com 'eyJ'." };
+  }
 
-    if (serverError || massError || communityError) {
-       const err = serverError || massError || communityError;
-       console.warn("Erro de conexão Supabase:", err?.message);
-       return { success: false, message: `Erro: ${err?.message}` };
+  try {
+    // Tenta uma busca simples para validar a conexão
+    const { error: serverError } = await supabase.from('servers').select('count', { count: 'exact', head: true });
+    
+    if (serverError) {
+      console.error("Erro Supabase:", serverError);
+      if (serverError.code === 'PGRST204' || serverError.message?.includes('not found') || serverError.code === '42P01') {
+        return { success: false, message: "Tabelas não encontradas. Clique no 'Erro DB' no topo e siga instruções SQL." };
+      }
+      return { success: false, message: `Erro: ${serverError.message} (${serverError.code})` };
     }
 
     return { success: true, message: "Tudo pronto! Banco de dados conectado." };
   } catch (err: any) {
-    return { success: false, message: "Erro de rede ou URL inválida" };
+    return { success: false, message: "Erro de rede ou URL inválida. Verifique os Secrets." };
   }
 };
 
