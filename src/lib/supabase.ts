@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://pgfjgvtzvwtrlhhvcomg.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnZmpndnR6dnd0cmxoaHZjb21nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzIwNDkyMiwiZXhwIjoyMDkyNzgwOTIyfQ.HBPRBuCJfx7cNoGbI0r5KubPvTj1wEpPjneTvTIIn9A';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL_URL || 'https://pgfjgvtzvwtrlhhvcomg.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnZmpndnR6dnd0cmxoaHZjb21nIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzIwNDkyMiwiZXhwIjoyMDkyNzgwOTIyfQ.HBPRBuCJfx7cNoGbI0r5KubPvTj1wEpPjneTvTIIn9A';
 
 // If configuration is missing, we alert in the console
 if (!supabaseUrl && !supabaseAnonKey) {

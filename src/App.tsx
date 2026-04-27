@@ -123,9 +123,16 @@ export default function App() {
   const [connStatus, setConnStatus] = useState<{success: boolean, message: string} | null>(null);
 
   const [showSqlSetup, setShowSqlSetup] = useState(false);
+  const [isClerkKey, setIsClerkKey] = useState(false);
 
   // Connection check
   useEffect(() => {
+    // Check if the key looks like a Clerk key
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON || '';
+    if (key.startsWith('sb_publishable_') || key.startsWith('pk_')) {
+      setIsClerkKey(true);
+    }
+
     checkSupabaseConnection().then((res) => {
       setConnStatus(res);
       if (!res.success && res.message.includes('não encontrada')) {
@@ -762,6 +769,12 @@ export default function App() {
               </p>
               <ol className="text-xs text-slate-500 space-y-2 list-decimal ml-4 font-bold">
                 <li>Acesse o painel do Supabase do seu projeto.</li>
+                {isClerkKey && (
+                  <li className="text-red-600 bg-red-100 p-2 rounded border border-red-200">
+                    ⚠️ <strong>ATENÇÃO:</strong> Sua chave no painel "Secrets" parece ser uma chave do Clerk (começa com sb_publishable). 
+                    Você deve usar a <strong>ANONYMOUS KEY</strong> do Supabase (que começa com <code>eyJ...</code>, encontrada em Settings {'>'} API).
+                  </li>
+                )}
                 <li className="text-red-500 underline">VERIFIQUE se o seu projeto é: {import.meta.env.VITE_SUPABASE_URL || 'Projeto Padrão (pgfjgvtzvwtrlhhvcomg)'}</li>
                 <li>No menu lateral, clique em <span className="text-indigo-600">SQL Editor</span>.</li>
                 <li>Clique em <span className="text-indigo-600">New Query</span>.</li>
