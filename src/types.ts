@@ -30,4 +30,4 @@ export interface Mass {
   ownerId: string;
 }
 
-export type View = 'dashboard' | 'members' | 'masses' | 'schedule' | 'communities';
+export type View = 'dashboard' | 'members' | 'masses' | 'schedule' | 'communities' | 'users_admin';

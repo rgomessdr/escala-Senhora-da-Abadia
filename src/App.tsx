@@ -66,14 +66,16 @@ const AUTHORIZED_EMAILS = [
   'rodrigogomessdr@gmail.com'
 ];
 
-const SETUP_SQL = `-- ⚠️ ATENÇÃO: Se você já rodou um script antes e está dando erro, 
--- descomente as 3 linhas abaixo (remova os --) para limpar e recriar:
--- DROP TABLE IF EXISTS masses;
--- DROP TABLE IF EXISTS servers;
--- DROP TABLE IF EXISTS communities;
+const SETUP_SQL = `-- ⚠️ IMPORTANTE: DESATIVE A TRADUÇÃO DO NAVEGADOR ANTES DE COPIAR!
+-- O código abaixo DEVE estar em INGLÊS para funcionar.
 
--- 1. Criação das Tabelas
-CREATE TABLE IF NOT EXISTS servers (
+-- 1. LIMPAR TABELAS ANTIGAS (Garante que o novo formato seja aplicado)
+DROP TABLE IF EXISTS masses;
+DROP TABLE IF EXISTS servers;
+DROP TABLE IF EXISTS communities;
+
+-- 2. CRIAR TABELAS PARA FUNCIONAMENTO DO SISTEMA
+CREATE TABLE servers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('acolito', 'coroinha')),
@@ -85,14 +87,14 @@ CREATE TABLE IF NOT EXISTS servers (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS communities (
+CREATE TABLE communities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   owner_id UUID DEFAULT auth.uid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS masses (
+CREATE TABLE masses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   date DATE NOT NULL,
@@ -103,12 +105,12 @@ CREATE TABLE IF NOT EXISTS masses (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Segurança (RLS)
+-- 3. SEGURANÇA (RLS)
 ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE masses ENABLE ROW LEVEL SECURITY;
 
--- 3. Políticas (TODOS VEEM TUDO E TODOS EDITAM TUDO PARA TESTES)
+-- 4. POLÍTICAS DE ACESSO
 DROP POLICY IF EXISTS "Acesso Total Servidores" ON servers;
 CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (true) WITH CHECK (true);
 
@@ -116,7 +118,27 @@ DROP POLICY IF EXISTS "Acesso Total Comunidades" ON communities;
 CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
-CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true) WITH CHECK (true);`;
+CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. GERENCIAMENTO DE USUÁRIOS (EXTRA)
+-- O Supabase Auth já gerencia usuários, mas precisamos de uma tabela para listar os 'autorizados' se quisermos gerenciar via UI
+CREATE TABLE IF NOT EXISTS admin_users (
+  email TEXT PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Inserir e-mails iniciais
+INSERT INTO admin_users (email) VALUES 
+('diogoortega@gmail.com'),
+('rodrigo--gomes@hotmail.com'),
+('rodrigogomessdr@gmail.com')
+ON CONFLICT DO NOTHING;
+
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Admins podem ver admins" ON admin_users FOR SELECT USING (true);
+CREATE POLICY "Admins podem adicionar admins" ON admin_users FOR INSERT WITH CHECK (true);
+CREATE POLICY "Admins podem remover admins" ON admin_users FOR DELETE USING (true);
+`;
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -131,6 +153,7 @@ export default function App() {
 
   const [showSqlSetup, setShowSqlSetup] = useState(false);
   const [isClerkKey, setIsClerkKey] = useState(false);
+  const [authorizedEmails, setAuthorizedEmails] = useState<string[]>([]);
 
   // Connection check
   useEffect(() => {
@@ -237,6 +260,21 @@ export default function App() {
   }, []);
 
   // Data Fetching
+  const fetchAuthorizedEmails = async () => {
+    try {
+      const { data, error } = await supabase.from('admin_users').select('email');
+      if (error) {
+        // Se a tabela não existir ainda, usa a lista local
+        console.warn("Tabela admin_users não encontrada, usando lista local.");
+        setAuthorizedEmails(AUTHORIZED_EMAILS);
+        return;
+      }
+      setAuthorizedEmails(data.map((d: any) => d.email));
+    } catch (err) {
+      setAuthorizedEmails(AUTHORIZED_EMAILS);
+    }
+  };
+
   const fetchData = async () => {
     if (!user) return;
     
@@ -288,6 +326,7 @@ export default function App() {
 
   useEffect(() => {
     fetchData();
+    fetchAuthorizedEmails();
     
     // Set up real-time subscriptions
     if (!user) return;
@@ -703,6 +742,7 @@ export default function App() {
           <NavTab active={view === 'members'} onClick={() => setView('members')} label="Membros" />
           <NavTab active={view === 'communities'} onClick={() => setView('communities')} label="Comunidades" />
           <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
+          <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />
           <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label="Montar Escala" />
         </div>
 
@@ -748,6 +788,7 @@ export default function App() {
                 <NavButtonView active={view === 'members'} onClick={() => { setView('members'); setIsSidebarOpen(false); }} icon={<Users size={18} />} label="Membros" />
                 <NavButtonView active={view === 'communities'} onClick={() => { setView('communities'); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label="Comunidades" />
                 <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<Church size={18} />} label="Missas" />
+                <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Usuários" />
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
               </div>
               <div className="mt-auto pt-6 border-t">
@@ -849,6 +890,17 @@ export default function App() {
             )}
             {view === 'members' && <MembersView servers={servers} onAdd={addServer} onUpdate={updateServer} onDelete={removeServer} stats={serverStats} />}
             {view === 'communities' && <CommunitiesView communities={communities} onAdd={addCommunity} onUpdate={updateCommunity} onDelete={removeCommunity} />}
+            {view === 'users_admin' && (
+              <UsersAdminView 
+                emails={authorizedEmails} 
+                onAdd={(email: string) => {
+                  supabase.from('admin_users').insert({ email }).then(() => fetchAuthorizedEmails());
+                }} 
+                onDelete={(email: string) => {
+                  supabase.from('admin_users').delete().eq('email', email).then(() => fetchAuthorizedEmails());
+                }} 
+              />
+            )}
             {view === 'masses' && (
               <MassesView 
                 masses={masses} 
@@ -1125,6 +1177,149 @@ function DashboardView({
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UsersAdminView({ emails, onAdd, onDelete }: any) {
+  const [newEmail, setNewEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const handleAddEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmail.trim()) return;
+    onAdd(newEmail.trim().toLowerCase());
+    setNewEmail('');
+    setMsg({ type: 'success', text: 'E-mail autorizado com sucesso!' });
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg(null);
+    if (!newEmail.trim() || !password.trim()) return;
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: newEmail.trim().toLowerCase(),
+        password,
+        options: {
+          data: { display_name: displayName }
+        }
+      });
+
+      if (error) throw error;
+      
+      // Também adiciona à lista de autorizados se não estiver
+      onAdd(newEmail.trim().toLowerCase());
+      
+      setMsg({ type: 'success', text: 'Usuário criado com sucesso! O e-mail deve ser confirmado se a opção estiver ativa no Supabase.' });
+      setNewEmail('');
+      setPassword('');
+      setDisplayName('');
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  return (
+    <div className="space-y-8 pb-20">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Segurança do Sistema</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Administradores</h1>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="space-y-6">
+          <div className="glass-card p-8 space-y-6">
+             <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <UserPlus size={20} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Autorizar E-mail</h2>
+             </div>
+             
+             <p className="text-xs text-slate-500">Adicione o e-mail de quem poderá acessar o sistema. O usuário precisará criar uma conta com este mesmo e-mail.</p>
+
+             <form onSubmit={handleAddEmail} className="flex gap-2">
+                <input 
+                  type="email" 
+                  value={newEmail}
+                  onChange={e => setNewEmail(e.target.value)}
+                  placeholder="email@exemplo.com"
+                  className="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                />
+                <button type="submit" className="p-4 bg-indigo-600 text-white rounded-xl hover:bg-slate-900 transition-all shadow-md">
+                   <Plus size={20} />
+                </button>
+             </form>
+          </div>
+
+          <div className="glass-card p-8 space-y-6">
+             <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+                  <Mail size={20} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Lista de Autorizados</h2>
+             </div>
+
+             <div className="space-y-2">
+                {emails.map((email: string) => (
+                  <div key={email} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl group">
+                    <span className="text-sm font-bold text-slate-700">{email}</span>
+                    <button 
+                      onClick={() => onDelete(email)}
+                      disabled={email === 'diogoortega@gmail.com' || email === 'rodrigogomessdr@gmail.com'}
+                      className="p-2 text-slate-300 hover:text-rose-500 transition-colors disabled:opacity-0"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+             </div>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+           <div className="glass-card p-8 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-700 flex items-center justify-center text-white">
+                  <LogIn size={20} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Criar Conta de Usuário</h2>
+              </div>
+              
+              <p className="text-xs text-slate-500 italic">Este formulário cria o usuário diretamente no banco de autenticação do Supabase.</p>
+
+              {msg && (
+                <div className={`p-4 rounded-xl text-xs font-bold ${msg.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+                  {msg.text}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400">NOME EXIBIÇÃO</label>
+                    <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl" placeholder="Nome do Admin" />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400">E-MAIL</label>
+                    <input type="email" required value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl" placeholder="admin@abadia.com" />
+                 </div>
+                 <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400">SENHA PROVISÓRIA</label>
+                    <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl" placeholder="Mínimo 6 caracteres" />
+                 </div>
+                 <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all">
+                    Criar Usuário no Supabase
+                 </button>
+              </form>
+           </div>
         </div>
       </div>
     </div>
