@@ -25,13 +25,16 @@ import {
   Share2,
   Phone,
   Mail,
-  Edit2
+  Edit2,
+  Settings,
+  User,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
 import { Server, Mass, View, ServerRole, Community } from './types';
-import { User } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
 
 // --- Error Handling ---
 enum OperationType {
@@ -155,6 +158,7 @@ export default function App() {
   const [showSqlSetup, setShowSqlSetup] = useState(false);
   const [isClerkKey, setIsClerkKey] = useState(false);
   const [authorizedEmails, setAuthorizedEmails] = useState<string[]>([]);
+  const isSuperAdmin = user?.email === 'rodrigogomessdr@gmail.com' || user?.email === 'diogoortega@gmail.com';
 
   // Connection check
   useEffect(() => {
@@ -743,8 +747,9 @@ export default function App() {
           <NavTab active={view === 'members'} onClick={() => setView('members')} label="Membros" />
           <NavTab active={view === 'communities'} onClick={() => setView('communities')} label="Comunidades" />
           <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
-          <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />
+          {isSuperAdmin && <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />}
           <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label="Montar Escala" />
+          <NavTab active={view === 'profile'} onClick={() => setView('profile')} label={user.user_metadata?.display_name || 'Meu Perfil'} />
         </div>
 
         {/* User / Logout */}
@@ -789,8 +794,9 @@ export default function App() {
                 <NavButtonView active={view === 'members'} onClick={() => { setView('members'); setIsSidebarOpen(false); }} icon={<Users size={18} />} label="Membros" />
                 <NavButtonView active={view === 'communities'} onClick={() => { setView('communities'); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label="Comunidades" />
                 <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<Church size={18} />} label="Missas" />
-                <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Usuários" />
+                {isSuperAdmin && <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Usuários" />}
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
+                <NavButtonView active={view === 'profile'} onClick={() => { setView('profile'); setIsSidebarOpen(false); }} icon={<Settings size={18} />} label="Meu Perfil" />
               </div>
               <div className="mt-auto pt-6 border-t">
                 <button onClick={handleSignOut} className="w-full flex items-center gap-3 p-3 text-rose-500 font-bold text-sm hover:bg-rose-50 rounded-xl transition-colors">
@@ -891,7 +897,8 @@ export default function App() {
             )}
             {view === 'members' && <MembersView servers={servers} onAdd={addServer} onUpdate={updateServer} onDelete={removeServer} stats={serverStats} />}
             {view === 'communities' && <CommunitiesView communities={communities} onAdd={addCommunity} onUpdate={updateCommunity} onDelete={removeCommunity} />}
-            {view === 'users_admin' && (
+            {view === 'profile' && <ProfileView user={user} />}
+            {view === 'users_admin' && isSuperAdmin && (
               <UsersAdminView 
                 emails={authorizedEmails} 
                 onAdd={(email: string) => {
@@ -1181,6 +1188,133 @@ function DashboardView({
               </div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileView({ user }: { user: any }) {
+  const [displayName, setDisplayName] = useState(user.user_metadata?.display_name || '');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg(null);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { display_name: displayName }
+      });
+      if (error) throw error;
+      setMsg({ type: 'success', text: 'Nome de exibição atualizado com sucesso!' });
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg(null);
+
+    if (password !== confirmPassword) {
+      setMsg({ type: 'error', text: 'As senhas não coincidem.' });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: password
+      });
+      if (error) throw error;
+      setMsg({ type: 'success', text: 'Senha atualizada com sucesso!' });
+      setPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  return (
+    <div className="space-y-8 pb-20">
+      <header className="space-y-1">
+        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gerenciamento de Conta</p>
+        <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Meu Perfil</h1>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Informações Básicas */}
+        <div className="glass-card p-8 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+              <User size={20} />
+            </div>
+            <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Dados Pessoais</h2>
+          </div>
+
+          {msg && (
+            <div className={`p-4 rounded-xl text-xs font-bold ${msg.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
+              {msg.text}
+            </div>
+          )}
+
+          <form onSubmit={handleUpdateProfile} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400">E-MAIL (SOMENTE LEITURA)</label>
+              <input type="text" readOnly value={user.email} className="w-full p-3 bg-slate-50 border rounded-xl text-slate-400 cursor-not-allowed" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400">NOME DE EXIBIÇÃO</label>
+              <input 
+                type="text" 
+                value={displayName} 
+                onChange={e => setDisplayName(e.target.value)} 
+                className="w-full p-3 bg-white border rounded-xl focus:border-indigo-500 outline-none transition-all" 
+                placeholder="Como você quer ser chamado" 
+              />
+            </div>
+            <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all">
+              Atualizar Nome
+            </button>
+          </form>
+        </div>
+
+        {/* Alterar Senha */}
+        <div className="glass-card p-8 space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+              <Lock size={20} />
+            </div>
+            <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Segurança</h2>
+          </div>
+
+          <form onSubmit={handleUpdatePassword} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400">NOVA SENHA</label>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={e => setPassword(e.target.value)} 
+                className="w-full p-3 bg-white border rounded-xl focus:border-indigo-500 outline-none transition-all" 
+                placeholder="Mínimo 6 caracteres" 
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400">CONFIRMAR NOVA SENHA</label>
+              <input 
+                type="password" 
+                value={confirmPassword} 
+                onChange={e => setConfirmPassword(e.target.value)} 
+                className="w-full p-3 bg-white border rounded-xl focus:border-indigo-500 outline-none transition-all" 
+                placeholder="Repita a senha" 
+              />
+            </div>
+            <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all">
+              Alterar Senha
+            </button>
+          </form>
         </div>
       </div>
     </div>
