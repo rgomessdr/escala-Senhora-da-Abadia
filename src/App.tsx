@@ -162,7 +162,8 @@ export default function App() {
   const [isClerkKey, setIsClerkKey] = useState(false);
   const [authorizedEmails, setAuthorizedEmails] = useState<{email: string, role: string}[]>([]);
   const [userRole, setUserRole] = useState<'admin' | 'usuario' | null>(null);
-  const isSuperAdmin = user?.email === 'rodrigogomessdr@gmail.com' || user?.email === 'diogoortega@gmail.com';
+  const userRoleValue = userRole || 'usuario';
+  const isAdmin = isSuperAdmin || userRoleValue === 'admin';
 
   // Set user role
   useEffect(() => {
@@ -747,7 +748,7 @@ export default function App() {
           <NavTab active={view === 'communities'} onClick={() => setView('communities')} label="Comunidades" />
           <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
           {isSuperAdmin && <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />}
-          <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label="Montar Escala" />
+          <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label={isAdmin ? "Montar Escala" : "Ver Escalas"} />
           <NavTab active={view === 'profile'} onClick={() => setView('profile')} label={user.user_metadata?.display_name || 'Meu Perfil'} />
         </div>
 
@@ -892,10 +893,11 @@ export default function App() {
                 setView={setView} 
                 clearAllData={clearAllData} 
                 isDeleting={isDeleting}
+                isAdmin={isAdmin}
               />
             )}
-            {view === 'members' && <MembersView servers={servers} onAdd={addServer} onUpdate={updateServer} onDelete={removeServer} stats={serverStats} />}
-            {view === 'communities' && <CommunitiesView communities={communities} onAdd={addCommunity} onUpdate={updateCommunity} onDelete={removeCommunity} />}
+            {view === 'members' && <MembersView servers={servers} onAdd={addServer} onUpdate={updateServer} onDelete={removeServer} stats={serverStats} isAdmin={isAdmin} />}
+            {view === 'communities' && <CommunitiesView communities={communities} onAdd={addCommunity} onUpdate={updateCommunity} onDelete={removeCommunity} isAdmin={isAdmin} />}
             {view === 'profile' && <ProfileView user={user} />}
             {view === 'users_admin' && isSuperAdmin && (
               <UsersAdminView 
@@ -919,6 +921,7 @@ export default function App() {
                 onDelete={removeMass} 
                 onUpdate={updateMass} 
                 communities={communities}
+                isAdmin={isAdmin}
               />
             )}
             {view === 'schedule' && (
@@ -929,6 +932,7 @@ export default function App() {
                 stats={serverStats} 
                 autoSchedule={autoSchedule} 
                 clearSchedule={clearSchedule} 
+                isAdmin={isAdmin}
               />
             )}
           </motion.div>
@@ -1083,7 +1087,8 @@ function DashboardView({
   stats, 
   setView, 
   clearAllData, 
-  isDeleting
+  isDeleting,
+  isAdmin
 }: any) {
   return (
     <div className="space-y-10">
@@ -1571,7 +1576,7 @@ function StatCardV2({ label, value, icon, color, alert }: any) {
   );
 }
 
-function MembersView({ servers, onAdd, onUpdate, onDelete, stats }: any) {
+function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any) {
   const [name, setName] = useState('');
   const [type, setType] = useState<ServerRole>('coroinha');
   const [email, setEmail] = useState('');
@@ -1765,7 +1770,7 @@ function RoleSelector({ active, onClick, label }: any) {
   );
 }
 
-function CommunitiesView({ communities, onAdd, onUpdate, onDelete }: any) {
+function CommunitiesView({ communities, onAdd, onUpdate, onDelete, isAdmin }: any) {
   const [name, setName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -1852,14 +1857,16 @@ function CommunitiesView({ communities, onAdd, onUpdate, onDelete }: any) {
                     </div>
                     <h4 className="font-bold text-slate-800 uppercase text-sm tracking-tight">{c.name}</h4>
                   </div>
-                  <div className="flex gap-1 transform opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => startEdit(c)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
-                      <ChevronRight size={18} />
-                    </button>
-                    <button onClick={() => onDelete(c.id)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-1 transform opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => startEdit(c)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                        <ChevronRight size={18} />
+                      </button>
+                      <button onClick={() => onDelete(c.id)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1870,7 +1877,7 @@ function CommunitiesView({ communities, onAdd, onUpdate, onDelete }: any) {
   );
 }
 
-function MassesView({ masses, onAdd, onUpdate, onDelete, communities }: any) {
+function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }: any) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
@@ -2023,7 +2030,7 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities }: any) {
   );
 }
 
-function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule }: any) {
+function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(masses[0]?.id || null);
   const selectedMass = masses.find((m: any) => m.id === selectedMassId);
   const selectedMassAssignments = useMemo(() => {
@@ -2160,12 +2167,13 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                           return (
                             <button
                               key={s.id}
+                              disabled={!isAdmin}
                               onClick={() => onToggle(selectedMass.id, s.id, s.type)}
                               className={`w-full group flex items-center justify-between p-3 rounded-xl border transition-all text-left shadow-sm ${
                                 isAssigned 
                                   ? 'bg-indigo-600 border-indigo-600 text-white' 
                                   : 'bg-white border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 text-slate-700'
-                              }`}
+                              } ${!isAdmin ? 'cursor-default' : ''}`}
                             >
                               <div className="flex items-center gap-3">
                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-[10px] uppercase shadow-sm ${
