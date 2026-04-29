@@ -28,7 +28,8 @@ import {
   Edit2,
   Settings,
   User,
-  Lock
+  Lock,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
@@ -125,23 +126,25 @@ DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
 CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true) WITH CHECK (true);
 
 -- 5. GERENCIAMENTO DE USUÁRIOS (EXTRA)
--- O Supabase Auth já gerencia usuários, mas precisamos de uma tabela para listar os 'autorizados' se quisermos gerenciar via UI
+-- Adicionando roles: 'admin' (pode tudo) e 'usuario' (apenas visualiza)
 CREATE TABLE IF NOT EXISTS admin_users (
   email TEXT PRIMARY KEY,
+  role TEXT DEFAULT 'usuario' CHECK (role IN ('admin', 'usuario')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Inserir e-mails iniciais
-INSERT INTO admin_users (email) VALUES 
-('diogoortega@gmail.com'),
-('rodrigo--gomes@hotmail.com'),
-('rodrigogomessdr@gmail.com')
-ON CONFLICT DO NOTHING;
+-- Inserir e-mails iniciais com roles
+INSERT INTO admin_users (email, role) VALUES 
+('diogoortega@gmail.com', 'admin'),
+('rodrigo--gomes@hotmail.com', 'admin'),
+('rodrigogomessdr@gmail.com', 'admin')
+ON CONFLICT (email) DO UPDATE SET role = 'admin';
 
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Admins podem ver admins" ON admin_users FOR SELECT USING (true);
-CREATE POLICY "Admins podem adicionar admins" ON admin_users FOR INSERT WITH CHECK (true);
-CREATE POLICY "Admins podem remover admins" ON admin_users FOR DELETE USING (true);
+CREATE POLICY "Qualquer um logado vê admins" ON admin_users FOR SELECT USING (true);
+CREATE POLICY "Apenas super admins editam admins" ON admin_users FOR ALL USING (
+  auth.email() IN ('rodrigogomessdr@gmail.com', 'diogoortega@gmail.com')
+);
 `;
 
 export default function App() {
@@ -157,8 +160,17 @@ export default function App() {
 
   const [showSqlSetup, setShowSqlSetup] = useState(false);
   const [isClerkKey, setIsClerkKey] = useState(false);
-  const [authorizedEmails, setAuthorizedEmails] = useState<string[]>([]);
+  const [authorizedEmails, setAuthorizedEmails] = useState<{email: string, role: string}[]>([]);
+  const [userRole, setUserRole] = useState<'admin' | 'usuario' | null>(null);
   const isSuperAdmin = user?.email === 'rodrigogomessdr@gmail.com' || user?.email === 'diogoortega@gmail.com';
+
+  // Set user role
+  useEffect(() => {
+    if (user?.email) {
+      const authUser = authorizedEmails.find(a => a.email.toLowerCase() === user.email?.toLowerCase());
+      setUserRole(authUser?.role as any || 'usuario');
+    }
+  }, [user, authorizedEmails]);
 
   // Connection check
   useEffect(() => {
@@ -178,49 +190,44 @@ export default function App() {
 
   const handleEmailLogin = async (email: string, pass: string) => {
     setAuthError(null);
-    
-    // Validar e-mail localmente antes de tentar login (opcional, mas bom para UX)
     const normalizedEmail = email.trim().toLowerCase();
-    const authorized = AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase());
     
-    if (!authorized.includes(normalizedEmail)) {
-      console.warn("Bloqueio de Email:", normalizedEmail);
-      setAuthError(`O e-mail "${normalizedEmail}" não está na lista de administradores autorizados. Verifique se o e-mail está correto no código ou nas configurações.`);
+    // Check if authorized
+    const { data: authData } = await supabase.from('admin_users').select('email').eq('email', normalizedEmail).single();
+    
+    if (!authData) {
+      setAuthError(`O e-mail "${normalizedEmail}" não está autorizado a acessar este sistema.`);
       return;
     }
 
     try {
       const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password: pass });
-      if (error) {
-        if (error.message === 'Email not confirmed') {
-          throw new Error('E-mail não confirmado. No Supabase, vá em "Authentication" -> "Users" e exclua seu usuário e crie-o novamente, ou confirme-o clicando nos "3 pontinhos" ao lado do usuário.');
-        }
-        throw error;
-      }
+      if (error) throw error;
     } catch (error: any) {
-      console.error("Erro de Login:", error);
       setAuthError(error.message || 'Erro ao acessar o sistema.');
     }
   };
 
   const handleEmailRegister = async (email: string, pass: string, name: string) => {
     setAuthError(null);
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Check authorization first
+    const { data: authData } = await supabase.from('admin_users').select('email').eq('email', normalizedEmail).single();
+    
+    if (!authData) {
+      setAuthError(`O e-mail "${normalizedEmail}" não está autorizado para cadastro.`);
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signUp({ 
-        email, 
+        email: normalizedEmail, 
         password: pass,
-        options: {
-          data: { display_name: name }
-        }
+        options: { data: { display_name: name } }
       });
-      if (error) {
-        if (error.message === 'Email not confirmed') {
-          throw new Error('Conta criada! Mas você precisa confirmar o e-mail ou desativar a confirmação no Supabase (Authentication -> Providers -> Email -> Confirm email).');
-        }
-        throw error;
-      }
+      if (error) throw error;
     } catch (error: any) {
-      console.error("Erro de Cadastro:", error);
       setAuthError(error.message || 'Erro ao criar conta.');
     }
   };
@@ -231,34 +238,28 @@ export default function App() {
 
   // Auth Listener
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      
-      // Verificação extra de segurança no carregamento inicial
-      const normalizedAuthEmails = AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase());
-      if (currentUser && currentUser.email && !normalizedAuthEmails.includes(currentUser.email.trim().toLowerCase())) {
-         supabase.auth.signOut();
-         setUser(null);
-         setAuthError('Usuário não autorizado.');
+    const checkAuthStatus = async (currentUser: User | null) => {
+      if (currentUser && currentUser.email) {
+        const { data } = await supabase.from('admin_users').select('email').eq('email', currentUser.email.toLowerCase()).single();
+        if (!data) {
+          supabase.auth.signOut();
+          setUser(null);
+          setAuthError('Usuário não autorizado no banco de dados.');
+        } else {
+          setUser(currentUser);
+        }
       } else {
-         setUser(currentUser);
+        setUser(null);
       }
-      
       setLoading(false);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      checkAuthStatus(session?.user ?? null);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const currentUser = session?.user ?? null;
-      
-      // Verificação de segurança em tempo real
-      const normalizedAuthEmails = AUTHORIZED_EMAILS.map(e => e.trim().toLowerCase());
-      if (currentUser && currentUser.email && !normalizedAuthEmails.includes(currentUser.email.trim().toLowerCase())) {
-         supabase.auth.signOut();
-         setUser(null);
-         setAuthError('Usuário não autorizado.');
-      } else {
-         setUser(currentUser);
-      }
+      checkAuthStatus(session?.user ?? null);
     });
 
     return () => subscription.unsubscribe();
@@ -267,16 +268,14 @@ export default function App() {
   // Data Fetching
   const fetchAuthorizedEmails = async () => {
     try {
-      const { data, error } = await supabase.from('admin_users').select('email');
+      const { data, error } = await supabase.from('admin_users').select('email, role');
       if (error) {
-        // Se a tabela não existir ainda, usa a lista local
-        console.warn("Tabela admin_users não encontrada, usando lista local.");
-        setAuthorizedEmails(AUTHORIZED_EMAILS);
+        console.warn("Role DB Error:", error.message);
         return;
       }
-      setAuthorizedEmails(data.map((d: any) => d.email));
+      setAuthorizedEmails(data || []);
     } catch (err) {
-      setAuthorizedEmails(AUTHORIZED_EMAILS);
+      console.error(err);
     }
   };
 
@@ -900,15 +899,15 @@ export default function App() {
             {view === 'profile' && <ProfileView user={user} />}
             {view === 'users_admin' && isSuperAdmin && (
               <UsersAdminView 
-                emails={authorizedEmails} 
-                onAdd={(email: string) => {
-                  supabase.from('admin_users').insert({ email }).then(() => fetchAuthorizedEmails());
+                users={authorizedEmails} 
+                onAdd={(email: string, role: string) => {
+                  supabase.from('admin_users').insert({ email, role }).then(() => fetchAuthorizedEmails());
                 }} 
                 onDelete={(email: string) => {
                   supabase.from('admin_users').delete().eq('email', email).then(() => fetchAuthorizedEmails());
                 }} 
-                onUpdate={(oldEmail: string, newEmail: string) => {
-                  supabase.from('admin_users').update({ email: newEmail }).eq('email', oldEmail).then(() => fetchAuthorizedEmails());
+                onUpdate={(oldEmail: string, newEmail: string, role: string) => {
+                  supabase.from('admin_users').update({ email: newEmail, role }).eq('email', oldEmail).then(() => fetchAuthorizedEmails());
                 }}
               />
             )}
@@ -1321,30 +1320,32 @@ function ProfileView({ user }: { user: any }) {
   );
 }
 
-function UsersAdminView({ emails, onAdd, onDelete, onUpdate }: any) {
+function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
   const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState<'admin' | 'usuario'>('usuario');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [tempEditedEmail, setTempEditedEmail] = useState('');
+  const [tempEditedRole, setTempEditedRole] = useState<'admin' | 'usuario'>('usuario');
 
   const handleAddEmail = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmail.trim()) return;
-    onAdd(newEmail.trim().toLowerCase());
+    onAdd(newEmail.trim().toLowerCase(), newRole);
     setNewEmail('');
     setMsg({ type: 'success', text: 'E-mail autorizado com sucesso!' });
   };
 
   const handleUpdateEmail = (oldEmail: string) => {
-    if (!tempEditedEmail.trim() || tempEditedEmail === oldEmail) {
+    if (!tempEditedEmail.trim()) {
       setEditingEmail(null);
       return;
     }
-    onUpdate(oldEmail, tempEditedEmail.trim().toLowerCase());
+    onUpdate(oldEmail, tempEditedEmail.trim().toLowerCase(), tempEditedRole);
     setEditingEmail(null);
-    setMsg({ type: 'success', text: 'E-mail atualizado com sucesso!' });
+    setMsg({ type: 'success', text: 'Permissões atualizadas com sucesso!' });
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -1363,10 +1364,9 @@ function UsersAdminView({ emails, onAdd, onDelete, onUpdate }: any) {
 
       if (error) throw error;
       
-      // Também adiciona à lista de autorizados se não estiver
-      onAdd(newEmail.trim().toLowerCase());
+      onAdd(newEmail.trim().toLowerCase(), newRole);
       
-      setMsg({ type: 'success', text: 'Usuário criado com sucesso! O e-mail deve ser confirmado se a opção estiver ativa no Supabase.' });
+      setMsg({ type: 'success', text: 'Usuário criado com sucesso!' });
       setNewEmail('');
       setPassword('');
       setDisplayName('');
@@ -1380,7 +1380,7 @@ function UsersAdminView({ emails, onAdd, onDelete, onUpdate }: any) {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-1">
           <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Segurança do Sistema</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Administradores</h1>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Gerenciar Usuários</h1>
         </div>
       </header>
 
@@ -1391,70 +1391,93 @@ function UsersAdminView({ emails, onAdd, onDelete, onUpdate }: any) {
                 <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
                   <UserPlus size={20} />
                 </div>
-                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Autorizar E-mail</h2>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Autorizar e Definir Nível</h2>
              </div>
-             
-             <p className="text-xs text-slate-500">Adicione o e-mail de quem poderá acessar o sistema. O usuário precisará criar uma conta com este mesmo e-mail.</p>
 
-             <form onSubmit={handleAddEmail} className="flex gap-2">
+             <form onSubmit={handleAddEmail} className="space-y-4">
                 <input 
                   type="email" 
                   value={newEmail}
                   onChange={e => setNewEmail(e.target.value)}
                   placeholder="email@exemplo.com"
-                  className="flex-1 p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 outline-none transition-all font-semibold"
                 />
-                <button type="submit" className="p-4 bg-indigo-600 text-white rounded-xl hover:bg-slate-900 transition-all shadow-md">
-                   <Plus size={20} />
-                </button>
+                <div className="flex gap-2">
+                  <select 
+                    value={newRole}
+                    onChange={e => setNewRole(e.target.value as any)}
+                    className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs"
+                  >
+                    <option value="usuario">Usuário Comum (Visualiza)</option>
+                    <option value="admin">Administrador (Edita tudo)</option>
+                  </select>
+                  <button type="submit" className="p-4 bg-indigo-600 text-white rounded-xl hover:bg-slate-900 transition-all shadow-md">
+                    <Plus size={20} />
+                  </button>
+                </div>
              </form>
           </div>
 
           <div className="glass-card p-8 space-y-6">
              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-                  <Mail size={20} />
+                  <Shield size={20} />
                 </div>
-                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Lista de Autorizados</h2>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Usuários e Permissões</h2>
              </div>
 
              <div className="space-y-2">
-                {emails.map((email: string) => (
-                  <div key={email} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl group">
-                    {editingEmail === email ? (
-                      <div className="flex-1 flex gap-2">
+                {users.map((u: any) => (
+                  <div key={u.email} className="flex flex-col p-4 bg-slate-50 border border-slate-100 rounded-xl gap-2">
+                    {editingEmail === u.email ? (
+                      <div className="space-y-3">
                         <input 
-                          autoFocus
                           type="email" 
                           value={tempEditedEmail}
                           onChange={e => setTempEditedEmail(e.target.value)}
-                          className="flex-1 p-1 bg-white border border-indigo-200 rounded text-sm font-bold text-slate-700 outline-none"
+                          className="w-full p-2 bg-white border rounded text-sm font-bold"
                         />
-                        <button onClick={() => handleUpdateEmail(email)} className="p-1 px-2 bg-indigo-600 text-white rounded text-[10px] font-black uppercase">Salvar</button>
-                        <button onClick={() => setEditingEmail(null)} className="p-1 px-2 text-slate-400 hover:text-slate-600 rounded text-[10px] font-black uppercase">Cancelar</button>
+                        <select 
+                          value={tempEditedRole}
+                          onChange={e => setTempEditedRole(e.target.value as any)}
+                          className="w-full p-2 bg-white border rounded text-xs font-bold"
+                        >
+                          <option value="usuario">Usuário Comum</option>
+                          <option value="admin">Administrador</option>
+                        </select>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleUpdateEmail(u.email)} className="flex-1 py-2 bg-indigo-600 text-white rounded text-[10px] font-black uppercase">Salvar</button>
+                          <button onClick={() => setEditingEmail(null)} className="flex-1 py-2 bg-slate-200 text-slate-600 rounded text-[10px] font-black uppercase">Cancelar</button>
+                        </div>
                       </div>
                     ) : (
-                      <>
-                        <span className="text-sm font-bold text-slate-700">{email}</span>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">{u.email}</p>
+                          <p className={`text-[9px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'text-indigo-600' : 'text-slate-400'}`}>
+                            {u.role === 'admin' ? 'Administrador' : 'Usuário Comum'}
+                          </p>
+                        </div>
                         <div className="flex items-center gap-1">
                           <button 
                             onClick={() => {
-                              setEditingEmail(email);
-                              setTempEditedEmail(email);
+                              setEditingEmail(u.email);
+                              setTempEditedEmail(u.email);
+                              setTempEditedRole(u.role);
                             }}
                             className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
                           >
                             <Edit2 size={16} />
                           </button>
                           <button 
-                            onClick={() => onDelete(email)}
-                            disabled={email === 'diogoortega@gmail.com' || email === 'rodrigogomessdr@gmail.com'}
+                            onClick={() => onDelete(u.email)}
+                            disabled={u.email === 'rodrigogomessdr@gmail.com'}
                             className="p-2 text-slate-300 hover:text-rose-500 transition-colors disabled:opacity-0"
                           >
                             <Trash2 size={16} />
                           </button>
                         </div>
-                      </>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -1465,20 +1488,12 @@ function UsersAdminView({ emails, onAdd, onDelete, onUpdate }: any) {
         <div className="space-y-6">
            <div className="glass-card p-8 space-y-6">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-700 flex items-center justify-center text-white">
+                <div className="w-10 h-10 rounded-xl bg-indigo-900 flex items-center justify-center text-white">
                   <LogIn size={20} />
                 </div>
-                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Criar Conta de Usuário</h2>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Cadastrar Novo Acesso</h2>
               </div>
               
-              <p className="text-xs text-slate-500 italic">Este formulário cria o usuário diretamente no banco de autenticação do Supabase.</p>
-
-              {msg && (
-                <div className={`p-4 rounded-xl text-xs font-bold ${msg.type === 'success' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
-                  {msg.text}
-                </div>
-              )}
-
               <form onSubmit={handleCreateUser} className="space-y-4">
                  <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400">NOME EXIBIÇÃO</label>
@@ -1493,7 +1508,7 @@ function UsersAdminView({ emails, onAdd, onDelete, onUpdate }: any) {
                     <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl" placeholder="Mínimo 6 caracteres" />
                  </div>
                  <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all">
-                    Criar Usuário no Supabase
+                    Criar e Autorizar
                  </button>
               </form>
            </div>
