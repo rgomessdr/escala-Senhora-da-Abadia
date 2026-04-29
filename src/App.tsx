@@ -708,6 +708,7 @@ export default function App() {
         onEmailLogin={handleEmailLogin}
         onEmailRegister={handleEmailRegister}
         error={authError}
+        onClearError={() => setAuthError(null)}
       />
     );
   }
@@ -904,14 +905,44 @@ export default function App() {
             {view === 'users_admin' && isSuperAdmin && (
               <UsersAdminView 
                 users={authorizedEmails} 
-                onAdd={(email: string, role: string) => {
-                  supabase.from('admin_users').insert({ email, role }).then(() => fetchAuthorizedEmails());
+                onAdd={async (email: string, role: string, pass: string) => {
+                  try {
+                    // Autorizar no banco
+                    await supabase.from('admin_users').insert({ email, role });
+                    
+                    // Tentar criar conta
+                    const { error: signUpError } = await supabase.auth.signUp({ 
+                      email, 
+                      password: pass,
+                      options: { data: { display_name: email.split('@')[0] } } 
+                    });
+
+                    if (signUpError) {
+                      if (signUpError.message?.toLowerCase().includes('already') || signUpError.status === 400) {
+                        alert(`O e-mail ${email} já possui uma conta, mas agora foi autorizado como Administrador.`);
+                      } else {
+                        throw signUpError;
+                      }
+                    } else {
+                      alert(`Administrador ${email} autorizado. A conta foi criada com a senha informada.`);
+                    }
+                    
+                    fetchAuthorizedEmails();
+                  } catch (err: any) {
+                    alert("Erro ao autorizar admin: " + err.message);
+                    fetchAuthorizedEmails();
+                  }
                 }} 
                 onDelete={(email: string) => {
-                  supabase.from('admin_users').delete().eq('email', email).then(() => fetchAuthorizedEmails());
+                  if (window.confirm(`Remover autorização de ${email}? Ele perderá acesso ao painel.`)) {
+                    supabase.from('admin_users').delete().eq('email', email).then(() => fetchAuthorizedEmails());
+                  }
                 }} 
                 onUpdate={(oldEmail: string, newEmail: string, role: string) => {
-                  supabase.from('admin_users').update({ email: newEmail, role }).eq('email', oldEmail).then(() => fetchAuthorizedEmails());
+                  supabase.from('admin_users').update({ email: newEmail, role }).eq('email', oldEmail).then(() => {
+                    fetchAuthorizedEmails();
+                    alert("Dados do administrador atualizados.");
+                  });
                 }}
               />
             )}
@@ -946,7 +977,7 @@ export default function App() {
 
 function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'usuario'>('usuario');
+  const [password, setPassword] = useState('');
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -954,20 +985,23 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
     if (!email.trim()) return;
 
     if (editingEmail) {
-      onUpdate(editingEmail, email, role);
+      onUpdate(editingEmail, email, 'admin');
       setEditingEmail(null);
     } else {
-      onAdd(email, role);
+      if (!password.trim()) {
+        alert("Defina uma senha para o novo administrador.");
+        return;
+      }
+      onAdd(email, 'admin', password);
     }
 
     setEmail('');
-    setRole('usuario');
+    setPassword('');
   };
 
   const startEdit = (u: any) => {
     setEditingEmail(u.email);
     setEmail(u.email);
-    setRole(u.role as any || 'usuario');
   };
 
   return (
@@ -987,7 +1021,7 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
                 <Shield size={20} />
               </div>
               <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
-                {editingEmail ? 'Editar Acesso' : 'Autorizar E-mail'}
+                {editingEmail ? 'Editar Acesso' : 'Autorizar Novo Admin'}
               </h2>
             </div>
 
@@ -1003,28 +1037,22 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nível de Permissão</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    type="button"
-                    onClick={() => setRole('admin')}
-                    className={`p-4 rounded-xl border font-bold text-[10px] uppercase tracking-widest transition-all ${role === 'admin' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'}`}
-                  >
-                    Admin
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => setRole('usuario')}
-                    className={`p-4 rounded-xl border font-bold text-[10px] uppercase tracking-widest transition-all ${role === 'usuario' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'}`}
-                  >
-                    Comum
-                  </button>
+              {!editingEmail && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha Provisória</label>
+                  <input 
+                    type="password" 
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all"
+                  />
+                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 ml-1 leading-tight">O usuário poderá entrar com este e-mail e senha.</p>
                 </div>
-              </div>
+              )}
 
               <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
-                <Plus size={16} /> {editingEmail ? 'Salvar Alterações' : 'Autorizar E-mail'}
+                <Plus size={16} /> {editingEmail ? 'Salvar Alterações' : 'Criar e Autorizar Admin'}
               </button>
               {editingEmail && (
                 <button type="button" onClick={() => { setEditingEmail(null); setEmail(''); }} className="w-full py-3 text-[10px] font-black text-slate-400 uppercase">Cancelar Edição</button>
@@ -1038,14 +1066,14 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
             <div className="p-6 border-b border-slate-50 bg-slate-50/30">
                <div className="flex items-center gap-2 text-rose-500">
                   <AlertTriangle size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Atenção: Apenas e-mails nesta lista podem acessar o sistema.</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Atenção: Apenas administradores pré-autorizados podem acessar o painel.</span>
                </div>
             </div>
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-slate-100">
-                  <th className="p-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail</th>
-                  <th className="p-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargo</th>
+                  <th className="p-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail Administrativo</th>
+                  <th className="p-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                   <th className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Ações</th>
                 </tr>
               </thead>
@@ -1054,10 +1082,11 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
                   <tr key={u.email} className="hover:bg-slate-50 transition-colors group">
                     <td className="p-4">
                       <span className="font-bold text-slate-800 text-sm tracking-tight">{u.email}</span>
+                      {u.email === 'rodrigogomessdr@gmail.com' && <span className="ml-2 text-[8px] font-black bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded uppercase tracking-widest">Sistema</span>}
                     </td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
-                        {u.role === 'admin' ? 'Administrador' : 'Comum'}
+                      <span className="px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600">
+                        Administrador
                       </span>
                     </td>
                     <td className="p-4">
@@ -1065,7 +1094,11 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
                         <button onClick={() => startEdit(u)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors">
                           <Edit2 size={14} />
                         </button>
-                        <button onClick={() => onDelete(u.email)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
+                        <button 
+                          onClick={() => onDelete(u.email)} 
+                          disabled={u.email === 'rodrigogomessdr@gmail.com'}
+                          className="p-2 text-slate-300 hover:text-rose-500 transition-colors disabled:opacity-0"
+                        >
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -1080,6 +1113,7 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
     </div>
   );
 }
+
 
 // --- Internal Components ---
 
@@ -1113,11 +1147,13 @@ function NavButtonView({ active, onClick, icon, label }: { active: boolean, onCl
 function AuthView({ 
   onEmailLogin, 
   onEmailRegister,
-  error 
+  error,
+  onClearError 
 }: { 
   onEmailLogin: (email: string, pass: string) => void,
   onEmailRegister: (email: string, pass: string, name: string) => void,
-  error: string | null
+  error: string | null,
+  onClearError: () => void
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -1228,7 +1264,7 @@ function AuthView({
               <button 
                 onClick={() => {
                   setIsRegistering(!isRegistering);
-                  setAuthError(null);
+                  onClearError();
                 }}
                 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
               >
