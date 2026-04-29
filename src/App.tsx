@@ -27,7 +27,7 @@ import {
   Mail,
   Edit2,
   Settings,
-  User,
+  User as UserIcon,
   Lock,
   Shield
 } from 'lucide-react';
@@ -162,6 +162,7 @@ export default function App() {
   const [isClerkKey, setIsClerkKey] = useState(false);
   const [authorizedEmails, setAuthorizedEmails] = useState<{email: string, role: string}[]>([]);
   const [userRole, setUserRole] = useState<'admin' | 'usuario' | null>(null);
+  const isSuperAdmin = user?.email === 'rodrigogomessdr@gmail.com' || user?.email === 'diogoortega@gmail.com';
   const userRoleValue = userRole || 'usuario';
   const isAdmin = isSuperAdmin || userRoleValue === 'admin';
 
@@ -942,6 +943,143 @@ export default function App() {
   );
 }
 
+function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'admin' | 'usuario'>('usuario');
+  const [editingEmail, setEditingEmail] = useState<string | null>(null);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    if (editingEmail) {
+      onUpdate(editingEmail, email, role);
+      setEditingEmail(null);
+    } else {
+      onAdd(email, role);
+    }
+
+    setEmail('');
+    setRole('usuario');
+  };
+
+  const startEdit = (u: any) => {
+    setEditingEmail(u.email);
+    setEmail(u.email);
+    setRole(u.role as any || 'usuario');
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Segurança Paroquial</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Administradores</h1>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1">
+          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-lg">
+                <Shield size={20} />
+              </div>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                {editingEmail ? 'Editar Acesso' : 'Autorizar E-mail'}
+              </h2>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail da Conta</label>
+                <input 
+                  type="email" 
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="exemplo@gmail.com"
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nível de Permissão</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setRole('admin')}
+                    className={`p-4 rounded-xl border font-bold text-[10px] uppercase tracking-widest transition-all ${role === 'admin' ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'}`}
+                  >
+                    Admin
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setRole('usuario')}
+                    className={`p-4 rounded-xl border font-bold text-[10px] uppercase tracking-widest transition-all ${role === 'usuario' ? 'bg-slate-900 border-slate-900 text-white shadow-lg' : 'bg-white border-slate-100 text-slate-400 hover:bg-slate-50'}`}
+                  >
+                    Comum
+                  </button>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
+                <Plus size={16} /> {editingEmail ? 'Salvar Alterações' : 'Autorizar E-mail'}
+              </button>
+              {editingEmail && (
+                <button type="button" onClick={() => { setEditingEmail(null); setEmail(''); }} className="w-full py-3 text-[10px] font-black text-slate-400 uppercase">Cancelar Edição</button>
+              )}
+            </div>
+          </form>
+        </div>
+
+        <div className="lg:col-span-2">
+          <div className="glass-card overflow-hidden">
+            <div className="p-6 border-b border-slate-50 bg-slate-50/30">
+               <div className="flex items-center gap-2 text-rose-500">
+                  <AlertTriangle size={14} />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Atenção: Apenas e-mails nesta lista podem acessar o sistema.</span>
+               </div>
+            </div>
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="p-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">E-mail</th>
+                  <th className="p-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargo</th>
+                  <th className="p-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {users.map((u: any) => (
+                  <tr key={u.email} className="hover:bg-slate-50 transition-colors group">
+                    <td className="p-4">
+                      <span className="font-bold text-slate-800 text-sm tracking-tight">{u.email}</span>
+                    </td>
+                    <td className="p-4">
+                      <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
+                        {u.role === 'admin' ? 'Administrador' : 'Comum'}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => startEdit(u)} className="p-2 text-slate-300 hover:text-indigo-600 transition-colors">
+                          <Edit2 size={14} />
+                        </button>
+                        <button onClick={() => onDelete(u.email)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Internal Components ---
 
 function NavTab({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
@@ -1011,9 +1149,9 @@ function AuthView({
             </div>
             
             <div className="text-center space-y-1 relative z-10">
-              <h2 className="text-xl font-bold text-slate-800">Portal do Altar</h2>
+              <h2 className="text-xl font-bold text-slate-800">Altar Digital</h2>
               <p className="text-xs text-slate-400 font-medium leading-relaxed">
-                Acesso restrito aos administradores autorizados da Abadia.
+                Gestão de Escalas da Paróquia Nossa Senhora da Abadia.
               </p>
             </div>
 
@@ -1253,7 +1391,7 @@ function ProfileView({ user }: { user: any }) {
         <div className="glass-card p-8 space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-              <User size={20} />
+              <UserIcon size={20} />
             </div>
             <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Dados Pessoais</h2>
           </div>
@@ -1325,203 +1463,7 @@ function ProfileView({ user }: { user: any }) {
   );
 }
 
-function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
-  const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState<'admin' | 'usuario'>('usuario');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  const [editingEmail, setEditingEmail] = useState<string | null>(null);
-  const [tempEditedEmail, setTempEditedEmail] = useState('');
-  const [tempEditedRole, setTempEditedRole] = useState<'admin' | 'usuario'>('usuario');
 
-  const handleAddEmail = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newEmail.trim()) return;
-    onAdd(newEmail.trim().toLowerCase(), newRole);
-    setNewEmail('');
-    setMsg({ type: 'success', text: 'E-mail autorizado com sucesso!' });
-  };
-
-  const handleUpdateEmail = (oldEmail: string) => {
-    if (!tempEditedEmail.trim()) {
-      setEditingEmail(null);
-      return;
-    }
-    onUpdate(oldEmail, tempEditedEmail.trim().toLowerCase(), tempEditedRole);
-    setEditingEmail(null);
-    setMsg({ type: 'success', text: 'Permissões atualizadas com sucesso!' });
-  };
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMsg(null);
-    if (!newEmail.trim() || !password.trim()) return;
-
-    try {
-      const { error } = await supabase.auth.signUp({
-        email: newEmail.trim().toLowerCase(),
-        password,
-        options: {
-          data: { display_name: displayName }
-        }
-      });
-
-      if (error) throw error;
-      
-      onAdd(newEmail.trim().toLowerCase(), newRole);
-      
-      setMsg({ type: 'success', text: 'Usuário criado com sucesso!' });
-      setNewEmail('');
-      setPassword('');
-      setDisplayName('');
-    } catch (err: any) {
-      setMsg({ type: 'error', text: err.message });
-    }
-  };
-
-  return (
-    <div className="space-y-8 pb-20">
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Segurança do Sistema</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Gerenciar Usuários</h1>
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
-          <div className="glass-card p-8 space-y-6">
-             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                  <UserPlus size={20} />
-                </div>
-                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Autorizar e Definir Nível</h2>
-             </div>
-
-             <form onSubmit={handleAddEmail} className="space-y-4">
-                <input 
-                  type="email" 
-                  value={newEmail}
-                  onChange={e => setNewEmail(e.target.value)}
-                  placeholder="email@exemplo.com"
-                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 outline-none transition-all font-semibold"
-                />
-                <div className="flex gap-2">
-                  <select 
-                    value={newRole}
-                    onChange={e => setNewRole(e.target.value as any)}
-                    className="flex-1 p-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-xs"
-                  >
-                    <option value="usuario">Usuário Comum (Visualiza)</option>
-                    <option value="admin">Administrador (Edita tudo)</option>
-                  </select>
-                  <button type="submit" className="p-4 bg-indigo-600 text-white rounded-xl hover:bg-slate-900 transition-all shadow-md">
-                    <Plus size={20} />
-                  </button>
-                </div>
-             </form>
-          </div>
-
-          <div className="glass-card p-8 space-y-6">
-             <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-                  <Shield size={20} />
-                </div>
-                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Usuários e Permissões</h2>
-             </div>
-
-             <div className="space-y-2">
-                {users.map((u: any) => (
-                  <div key={u.email} className="flex flex-col p-4 bg-slate-50 border border-slate-100 rounded-xl gap-2">
-                    {editingEmail === u.email ? (
-                      <div className="space-y-3">
-                        <input 
-                          type="email" 
-                          value={tempEditedEmail}
-                          onChange={e => setTempEditedEmail(e.target.value)}
-                          className="w-full p-2 bg-white border rounded text-sm font-bold"
-                        />
-                        <select 
-                          value={tempEditedRole}
-                          onChange={e => setTempEditedRole(e.target.value as any)}
-                          className="w-full p-2 bg-white border rounded text-xs font-bold"
-                        >
-                          <option value="usuario">Usuário Comum</option>
-                          <option value="admin">Administrador</option>
-                        </select>
-                        <div className="flex gap-2">
-                          <button onClick={() => handleUpdateEmail(u.email)} className="flex-1 py-2 bg-indigo-600 text-white rounded text-[10px] font-black uppercase">Salvar</button>
-                          <button onClick={() => setEditingEmail(null)} className="flex-1 py-2 bg-slate-200 text-slate-600 rounded text-[10px] font-black uppercase">Cancelar</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-bold text-slate-700">{u.email}</p>
-                          <p className={`text-[9px] font-black uppercase tracking-widest ${u.role === 'admin' ? 'text-indigo-600' : 'text-slate-400'}`}>
-                            {u.role === 'admin' ? 'Administrador' : 'Usuário Comum'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button 
-                            onClick={() => {
-                              setEditingEmail(u.email);
-                              setTempEditedEmail(u.email);
-                              setTempEditedRole(u.role);
-                            }}
-                            className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => onDelete(u.email)}
-                            disabled={u.email === 'rodrigogomessdr@gmail.com'}
-                            className="p-2 text-slate-300 hover:text-rose-500 transition-colors disabled:opacity-0"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-             </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-           <div className="glass-card p-8 space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-900 flex items-center justify-center text-white">
-                  <LogIn size={20} />
-                </div>
-                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Cadastrar Novo Acesso</h2>
-              </div>
-              
-              <form onSubmit={handleCreateUser} className="space-y-4">
-                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400">NOME EXIBIÇÃO</label>
-                    <input type="text" value={displayName} onChange={e => setDisplayName(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl" placeholder="Nome do Admin" />
-                 </div>
-                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400">E-MAIL</label>
-                    <input type="email" required value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl" placeholder="admin@abadia.com" />
-                 </div>
-                 <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400">SENHA PROVISÓRIA</label>
-                    <input type="password" required minLength={6} value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl" placeholder="Mínimo 6 caracteres" />
-                 </div>
-                 <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-600 transition-all">
-                    Criar e Autorizar
-                 </button>
-              </form>
-           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function FrequencyList({ title, items, stats }: any) {
   return (
@@ -1626,87 +1568,90 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1">
-          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                <UserPlus size={20} />
-              </div>
-              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
-                {editingId ? 'Editar Membro' : 'Cadastro Manual'}
-              </h2>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome Completo</label>
-                <input 
-                  type="text" 
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Ex: Gabriel Martins"
-                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
-                />
+        {isAdmin && (
+          <div className="lg:col-span-1">
+            <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                  <UserPlus size={20} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                  {editingId ? 'Editar Membro' : 'Cadastro Manual'}
+                </h2>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">WhatsApp</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome Completo</label>
                   <input 
                     type="text" 
-                    value={whatsapp}
-                    onChange={e => setWhatsapp(e.target.value)}
-                    placeholder="(00) 00000-0000"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Ex: Gabriel Martins"
                     className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
                   />
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">WhatsApp</label>
+                    <input 
+                      type="text" 
+                      value={whatsapp}
+                      onChange={e => setWhatsapp(e.target.value)}
+                      placeholder="(00) 00000-0000"
+                      className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nascimento</label>
+                    <input 
+                      type="date" 
+                      value={birthDate}
+                      onChange={e => setBirthDate(e.target.value)}
+                      className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nascimento</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">E-mail</label>
                   <input 
-                    type="date" 
-                    value={birthDate}
-                    onChange={e => setBirthDate(e.target.value)}
+                    type="email" 
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="exemplo@igreja.com"
                     className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">E-mail</label>
-                <input 
-                  type="email" 
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="exemplo@igreja.com"
-                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
-                />
-              </div>
-              
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Função</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <RoleSelector active={type === 'acolito'} onClick={() => setType('acolito')} label="Acólito" />
-                  <RoleSelector active={type === 'coroinha'} onClick={() => setType('coroinha')} label="Coroinha" />
+                
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Função</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <RoleSelector active={type === 'acolito'} onClick={() => setType('acolito')} label="Acólito" />
+                    <RoleSelector active={type === 'coroinha'} onClick={() => setType('coroinha')} label="Coroinha" />
+                  </div>
                 </div>
-              </div>
 
-              <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
-                <Plus size={18} /> {editingId ? 'Atualizar Membro' : 'Salvar Membro'}
-              </button>
-              {editingId && (
-                <button 
-                  type="button" 
-                  onClick={() => { setEditingId(null); setName(''); setEmail(''); setWhatsapp(''); setBirthDate(''); setType('coroinha'); }}
-                  className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
-                >
-                  Cancelar Edição
+                <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
+                  <Plus size={18} /> {editingId ? 'Atualizar Membro' : 'Salvar Membro'}
                 </button>
-              )}
-            </div>
-          </form>
-        </div>
+                {editingId && (
+                  <button 
+                    type="button" 
+                    onClick={() => { setEditingId(null); setName(''); setEmail(''); setWhatsapp(''); setBirthDate(''); setType('coroinha'); }}
+                    className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    Cancelar Edição
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        )}
 
-        <div className="lg:col-span-2">
+        <div className={isAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
+
           {servers.length === 0 ? (
             <div className="h-96 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center px-10">
               <Users size={64} className="text-slate-100 mb-6" />
@@ -1738,14 +1683,16 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => startEdit(s)} className="p-2 text-slate-200 hover:text-indigo-600 transition-colors">
-                      <ChevronRight size={18} />
-                    </button>
-                    <button onClick={() => onDelete(s.id)} className="p-2 text-slate-200 hover:text-rose-500 transition-colors group/trash">
-                      <Trash2 size={18} className="group-hover/trash:scale-110 transition-transform" />
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(s)} className="p-2 text-slate-200 hover:text-indigo-600 transition-colors">
+                        <ChevronRight size={18} />
+                      </button>
+                      <button onClick={() => onDelete(s.id)} className="p-2 text-slate-200 hover:text-rose-500 transition-colors group/trash">
+                        <Trash2 size={18} className="group-hover/trash:scale-110 transition-transform" />
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </div>
@@ -1802,46 +1749,48 @@ function CommunitiesView({ communities, onAdd, onUpdate, onDelete, isAdmin }: an
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1">
-          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-                <MapPin size={20} />
-              </div>
-              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
-                {editingId ? 'Editar Local' : 'Novo Local'}
-              </h2>
-            </div>
-
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome da Comunidade</label>
-                <input 
-                  type="text" 
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="Ex: Capela Santa Luzia"
-                  className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
-                />
+        {isAdmin && (
+          <div className="lg:col-span-1">
+            <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                  <MapPin size={20} />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                  {editingId ? 'Editar Local' : 'Novo Local'}
+                </h2>
               </div>
 
-              <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
-                <Plus size={18} /> {editingId ? 'Atualizar Local' : 'Salvar Local'}
-              </button>
-              {editingId && (
-                <button 
-                  type="button" 
-                  onClick={() => { setEditingId(null); setName(''); }}
-                  className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
-                >
-                  Cancelar
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Nome da Comunidade</label>
+                  <input 
+                    type="text" 
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Ex: Capela Santa Luzia"
+                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                  />
+                </div>
+
+                <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
+                  <Plus size={18} /> {editingId ? 'Atualizar Local' : 'Salvar Local'}
                 </button>
-              )}
-            </div>
-          </form>
-        </div>
+                {editingId && (
+                  <button 
+                    type="button" 
+                    onClick={() => { setEditingId(null); setName(''); }}
+                    className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        )}
 
-        <div className="lg:col-span-2">
+        <div className={isAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
           {communities.length === 0 ? (
             <div className="h-64 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center px-10">
               <MapPin size={48} className="text-slate-100 mb-4" />
@@ -1904,7 +1853,6 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
     setTitle('');
     setDate('');
     setTime('');
-    // Manter a localização selecionada se houver comunidades
   };
 
   const startEdit = (m: any) => {
@@ -1925,7 +1873,7 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-1">
           <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Agenda Litúrgica</p>
@@ -1934,63 +1882,67 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
-           <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                <Church size={20} />
-              </div>
-              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
-                {editingId ? 'Editar Evento' : 'Novo Evento'}
-              </h2>
-            </div>
+        {isAdmin && (
+          <div className="lg:col-span-1">
+            <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
+               <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                    <Church size={20} />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                    {editingId ? 'Editar Evento' : 'Novo Evento'}
+                  </h2>
+                </div>
 
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Título da Missa</label>
-                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Missa de Solenidade" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-indigo-500 font-bold" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Data</label>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
-                 </div>
-                 <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Horário</label>
-                    <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
-                 </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Localização</label>
-                {communities.length > 0 ? (
-                  <select 
-                    value={location} 
-                    onChange={e => setLocation(e.target.value)}
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 appearance-none"
-                  >
-                    {communities.map((c: any) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
-                    ))}
-                    <option value="Outro">Outro...</option>
-                  </select>
-                ) : (
-                  <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="Ex: Matriz Paroquial" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" />
-                )}
-                {location === 'Outro' && (
-                  <input type="text" onChange={e => setLocation(e.target.value)} placeholder="Digite o local" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 mt-2" />
-                )}
-              </div>
-              <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl">
-                 {editingId ? 'Atualizar Missa' : 'Agendar Missa'}
-              </button>
-              {editingId && (
-                <button type="button" onClick={cancelEdit} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">
-                  Cancelar Edição
-                </button>
-              )}
-            </div>
-        </form>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Título da Missa</label>
+                    <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Ex: Missa de Solenidade" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:border-indigo-500 font-bold" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Data</label>
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
+                     </div>
+                     <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Horário</label>
+                        <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold" />
+                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Localização</label>
+                    {communities.length > 0 ? (
+                      <select 
+                        value={location} 
+                        onChange={e => setLocation(e.target.value)}
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 appearance-none"
+                      >
+                        {communities.map((c: any) => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
+                        <option value="Outro">Outro...</option>
+                      </select>
+                    ) : (
+                      <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="Ex: Matriz Paroquial" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500" />
+                    )}
+                    {location === 'Outro' && (
+                      <input type="text" onChange={e => setLocation(e.target.value)} placeholder="Digite o local" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl font-bold outline-none focus:border-indigo-500 mt-2" />
+                    )}
+                  </div>
+                  <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl">
+                     {editingId ? 'Atualizar Missa' : 'Agendar Missa'}
+                  </button>
+                  {editingId && (
+                    <button type="button" onClick={cancelEdit} className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">
+                      Cancelar Edição
+                    </button>
+                  )}
+                </div>
+            </form>
+          </div>
+        )}
 
-        <div className="lg:col-span-2 space-y-4">
+        <div className={isAdmin ? "lg:col-span-2 space-y-4" : "lg:col-span-3 space-y-4"}>
            {masses.length === 0 ? (
              <div className="h-64 flex flex-col items-center justify-center glass-card border-dashed text-center px-10">
                 <Calendar size={48} className="text-slate-100 mb-4" />
@@ -2014,12 +1966,19 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
                    </div>
                    <div className="flex items-center gap-2">
                       <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest mr-4 hidden xl:block">Participantes: {m.assignments.acolitos.length + m.assignments.coroinhas.length}</div>
-                      <button onClick={() => startEdit(m)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
-                        <ChevronRight size={20} />
-                      </button>
-                      <button onClick={() => onDelete(m.id)} className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
-                        <Trash2 size={20} />
-                      </button>
+                      {isAdmin && (
+                        <>
+                          <button onClick={() => startEdit(m)} className="p-3 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+                            <ChevronRight size={20} />
+                          </button>
+                          <button onClick={() => onDelete(m.id)} className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all">
+                            <Trash2 size={20} />
+                          </button>
+                        </>
+                      )}
+                      {!isAdmin && (
+                        <div className="px-4 py-2 bg-slate-50 text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest leading-none">Apenas Leitura</div>
+                      )}
                    </div>
                 </div>
              ))
@@ -2075,27 +2034,31 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
           <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Montagem de Escala</h1>
         </div>
         <div className="flex gap-2">
-          <button 
-            onClick={clearSchedule}
-            className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all"
-          >
-             Limpar Tudo
-          </button>
-          <button 
-            onClick={autoSchedule}
-            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all"
-          >
-             <Layers size={16} /> Montagem Inteligente
-          </button>
+          {isAdmin && (
+            <>
+              <button 
+                onClick={clearSchedule}
+                className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all"
+              >
+                 Limpar Tudo
+              </button>
+              <button 
+                onClick={autoSchedule}
+                className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all"
+              >
+                 <Layers size={16} /> Montagem Inteligente
+              </button>
+            </>
+          )}
           <button 
             onClick={shareWhatsApp}
-            className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all"
+            className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-emerald-100 hover:bg-emerald-700 transition-all font-bold"
           >
              <Share2 size={16} /> WhatsApp
           </button>
           <button 
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all"
+            className="flex items-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-indigo-700 transition-all font-bold"
           >
              <Download size={16} /> Exportar
           </button>
