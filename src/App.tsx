@@ -162,7 +162,7 @@ export default function App() {
   const [isClerkKey, setIsClerkKey] = useState(false);
   const [authorizedEmails, setAuthorizedEmails] = useState<{email: string, role: string}[]>([]);
   const [userRole, setUserRole] = useState<'admin' | 'usuario' | null>(null);
-  const isSuperAdmin = user?.email === 'rodrigogomessdr@gmail.com' || user?.email === 'diogoortega@gmail.com';
+  const isSuperAdmin = user?.email === 'rodrigogomessdr@gmail.com' || user?.email === 'diogoortega@gmail.com' || user?.email === 'rodrigo--gomes@hotmail.com';
   const userRoleValue = userRole || 'usuario';
   const isAdmin = isSuperAdmin || userRoleValue === 'admin';
 
@@ -706,6 +706,7 @@ export default function App() {
     return (
       <AuthView 
         onEmailLogin={handleEmailLogin}
+        onEmailRegister={handleEmailRegister}
         error={authError}
       />
     );
@@ -1111,17 +1112,25 @@ function NavButtonView({ active, onClick, icon, label }: { active: boolean, onCl
 
 function AuthView({ 
   onEmailLogin, 
+  onEmailRegister,
   error 
 }: { 
   onEmailLogin: (email: string, pass: string) => void,
+  onEmailRegister: (email: string, pass: string, name: string) => void,
   error: string | null
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onEmailLogin(email, password);
+    if (isRegistering) {
+      onEmailRegister(email, password, name);
+    } else {
+      onEmailLogin(email, password);
+    }
   };
 
   return (
@@ -1149,9 +1158,11 @@ function AuthView({
             </div>
             
             <div className="text-center space-y-1 relative z-10">
-              <h2 className="text-xl font-bold text-slate-800">Altar Digital</h2>
-              <p className="text-xs text-slate-400 font-medium leading-relaxed">
-                Gestão de Escalas da Paróquia Nossa Senhora da Abadia.
+              <h2 className="text-xl font-bold text-slate-800">{isRegistering ? 'Criar Nova Conta' : 'Altar Digital'}</h2>
+              <p className="text-xs text-slate-400 font-medium leading-relaxed px-4">
+                {isRegistering 
+                  ? 'Você deve ser um administrador pré-autorizado para poder cadastrar uma senha.' 
+                  : 'Gestão de Escalas da Paróquia Nossa Senhora da Abadia.'}
               </p>
             </div>
 
@@ -1167,8 +1178,21 @@ function AuthView({
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {isRegistering && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nome Completo</label>
+                  <input 
+                    type="text"
+                    required
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl text-sm font-bold focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner"
+                    placeholder="Seu nome"
+                  />
+                </div>
+              )}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail Administrativo</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{isRegistering ? 'E-mail Autorizado' : 'E-mail Administrativo'}</label>
                 <input 
                   type="email"
                   required
@@ -1193,17 +1217,23 @@ function AuthView({
 
               <button 
                 type="submit"
-                className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3"
+                className={`w-full py-4 ${isRegistering ? 'bg-slate-900' : 'bg-indigo-600'} text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-slate-900 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-3`}
               >
-                <LogIn size={18} />
-                Entrar no Sistema
+                {isRegistering ? <UserPlus size={18} /> : <LogIn size={18} />}
+                {isRegistering ? 'Cadastrar Minha Senha' : 'Entrar no Sistema'}
               </button>
             </form>
 
             <div className="text-center pt-2 space-y-4">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                Apenas usuários pré-cadastrados
-              </p>
+              <button 
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setAuthError(null);
+                }}
+                className="text-[11px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
+              >
+                {isRegistering ? 'Já tenho conta? Entrar agora' : 'Primeiro acesso? Cadastrar senha'}
+              </button>
 
               <div className="pt-4 border-t border-slate-100">
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight leading-relaxed max-w-[200px] mx-auto text-center">
