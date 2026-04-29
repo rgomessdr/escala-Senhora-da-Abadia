@@ -162,7 +162,8 @@ export default function App() {
   const [isClerkKey, setIsClerkKey] = useState(false);
   const [authorizedEmails, setAuthorizedEmails] = useState<{email: string, role: string}[]>([]);
   const [userRole, setUserRole] = useState<'admin' | 'usuario' | null>(null);
-  const isSuperAdmin = user?.email === 'rodrigogomessdr@gmail.com' || user?.email === 'diogoortega@gmail.com' || user?.email === 'rodrigo--gomes@hotmail.com';
+  const SYSTEM_ADMINS = ['rodrigogomessdr@gmail.com', 'diogoortega@gmail.com', 'rodrigo--gomes@hotmail.com', 'contato@premiasidro.com.br'];
+  const isSuperAdmin = user?.email && SYSTEM_ADMINS.includes(user.email.toLowerCase());
   const userRoleValue = userRole || 'usuario';
   const isAdmin = isSuperAdmin || userRoleValue === 'admin';
 
@@ -195,9 +196,10 @@ export default function App() {
     const normalizedEmail = email.trim().toLowerCase();
     
     // Check if authorized
+    const isSystemAdmin = SYSTEM_ADMINS.includes(normalizedEmail);
     const { data: authData } = await supabase.from('admin_users').select('email').eq('email', normalizedEmail).single();
     
-    if (!authData) {
+    if (!authData && !isSystemAdmin) {
       setAuthError(`O e-mail "${normalizedEmail}" não está autorizado a acessar este sistema.`);
       return;
     }
@@ -215,9 +217,10 @@ export default function App() {
     const normalizedEmail = email.trim().toLowerCase();
 
     // Check authorization first
+    const isSystemAdmin = SYSTEM_ADMINS.includes(normalizedEmail);
     const { data: authData } = await supabase.from('admin_users').select('email').eq('email', normalizedEmail).single();
     
-    if (!authData) {
+    if (!authData && !isSystemAdmin) {
       setAuthError(`O e-mail "${normalizedEmail}" não está autorizado para cadastro.`);
       return;
     }
@@ -242,8 +245,11 @@ export default function App() {
   useEffect(() => {
     const checkAuthStatus = async (currentUser: User | null) => {
       if (currentUser && currentUser.email) {
-        const { data } = await supabase.from('admin_users').select('email').eq('email', currentUser.email.toLowerCase()).single();
-        if (!data) {
+        const normalizedEmail = currentUser.email.toLowerCase();
+        const isSystemAdmin = SYSTEM_ADMINS.includes(normalizedEmail);
+        const { data } = await supabase.from('admin_users').select('email').eq('email', normalizedEmail).single();
+        
+        if (!data && !isSystemAdmin) {
           supabase.auth.signOut();
           setUser(null);
           setAuthError('Usuário não autorizado no banco de dados.');
