@@ -48,7 +48,7 @@ export const checkSupabaseConnection = async () => {
           return { success: false, message: "TABELAS FALTANDO: Você precisa rodar o script SQL no painel do Supabase." };
         }
         // If it's a 400 with a message about columns, it might be that the table exists but schema changed
-        if (error.status === 400 || error.code === 'PGRST106') {
+        if (error.code === 'PGRST106') {
           return { success: false, message: "ERRO DE SCHEMA: Rode o script SQL novamente para atualizar as tabelas." };
         }
         return { success: false, message: `Erro DB: ${error.message} (${error.code})` };

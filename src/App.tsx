@@ -24,7 +24,8 @@ import {
   Layers,
   Share2,
   Phone,
-  Mail
+  Mail,
+  Edit2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
@@ -899,6 +900,9 @@ export default function App() {
                 onDelete={(email: string) => {
                   supabase.from('admin_users').delete().eq('email', email).then(() => fetchAuthorizedEmails());
                 }} 
+                onUpdate={(oldEmail: string, newEmail: string) => {
+                  supabase.from('admin_users').update({ email: newEmail }).eq('email', oldEmail).then(() => fetchAuthorizedEmails());
+                }}
               />
             )}
             {view === 'masses' && (
@@ -1183,11 +1187,13 @@ function DashboardView({
   );
 }
 
-function UsersAdminView({ emails, onAdd, onDelete }: any) {
+function UsersAdminView({ emails, onAdd, onDelete, onUpdate }: any) {
   const [newEmail, setNewEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [msg, setMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [editingEmail, setEditingEmail] = useState<string | null>(null);
+  const [tempEditedEmail, setTempEditedEmail] = useState('');
 
   const handleAddEmail = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1195,6 +1201,16 @@ function UsersAdminView({ emails, onAdd, onDelete }: any) {
     onAdd(newEmail.trim().toLowerCase());
     setNewEmail('');
     setMsg({ type: 'success', text: 'E-mail autorizado com sucesso!' });
+  };
+
+  const handleUpdateEmail = (oldEmail: string) => {
+    if (!tempEditedEmail.trim() || tempEditedEmail === oldEmail) {
+      setEditingEmail(null);
+      return;
+    }
+    onUpdate(oldEmail, tempEditedEmail.trim().toLowerCase());
+    setEditingEmail(null);
+    setMsg({ type: 'success', text: 'E-mail atualizado com sucesso!' });
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -1271,14 +1287,41 @@ function UsersAdminView({ emails, onAdd, onDelete }: any) {
              <div className="space-y-2">
                 {emails.map((email: string) => (
                   <div key={email} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl group">
-                    <span className="text-sm font-bold text-slate-700">{email}</span>
-                    <button 
-                      onClick={() => onDelete(email)}
-                      disabled={email === 'diogoortega@gmail.com' || email === 'rodrigogomessdr@gmail.com'}
-                      className="p-2 text-slate-300 hover:text-rose-500 transition-colors disabled:opacity-0"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {editingEmail === email ? (
+                      <div className="flex-1 flex gap-2">
+                        <input 
+                          autoFocus
+                          type="email" 
+                          value={tempEditedEmail}
+                          onChange={e => setTempEditedEmail(e.target.value)}
+                          className="flex-1 p-1 bg-white border border-indigo-200 rounded text-sm font-bold text-slate-700 outline-none"
+                        />
+                        <button onClick={() => handleUpdateEmail(email)} className="p-1 px-2 bg-indigo-600 text-white rounded text-[10px] font-black uppercase">Salvar</button>
+                        <button onClick={() => setEditingEmail(null)} className="p-1 px-2 text-slate-400 hover:text-slate-600 rounded text-[10px] font-black uppercase">Cancelar</button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold text-slate-700">{email}</span>
+                        <div className="flex items-center gap-1">
+                          <button 
+                            onClick={() => {
+                              setEditingEmail(email);
+                              setTempEditedEmail(email);
+                            }}
+                            className="p-2 text-slate-300 hover:text-indigo-600 transition-colors"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button 
+                            onClick={() => onDelete(email)}
+                            disabled={email === 'diogoortega@gmail.com' || email === 'rodrigogomessdr@gmail.com'}
+                            className="p-2 text-slate-300 hover:text-rose-500 transition-colors disabled:opacity-0"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
              </div>
