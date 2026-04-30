@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   Search,
+  Check,
   LogOut,
   LogIn,
   Loader2,
@@ -2170,23 +2171,44 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
   const [selectedMassId, setSelectedMassId] = useState<string | null>(masses[0]?.id || null);
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
   const [autoConfigs, setAutoConfigs] = useState<Record<string, { acolitos: number, coroinhas: number }>>({});
+  const [selectedMassesForAuto, setSelectedMassesForAuto] = useState<Set<string>>(new Set());
 
-  // Initialize configs if empty
+  // Initialize configs if empty and select all by default when opening
   useEffect(() => {
-    if (isAutoModalOpen && Object.keys(autoConfigs).length === 0) {
-      const initialConfigs: Record<string, { acolitos: number, coroinhas: number }> = {};
-      masses.forEach((m: any) => {
-        const isMatriz = m.location.toLowerCase().includes('matriz');
-        const dateObj = new Date(m.date + 'T12:00:00');
-        const isSunday = dateObj.getDay() === 0;
-        initialConfigs[m.id] = { 
-          acolitos: isMatriz ? 3 : (isSunday ? 2 : 1), 
-          coroinhas: isMatriz ? 4 : 2 
-        };
-      });
-      setAutoConfigs(initialConfigs);
+    if (isAutoModalOpen) {
+      if (Object.keys(autoConfigs).length === 0) {
+        const initialConfigs: Record<string, { acolitos: number, coroinhas: number }> = {};
+        masses.forEach((m: any) => {
+          const isMatriz = m.location.toLowerCase().includes('matriz');
+          const dateObj = new Date(m.date + 'T12:00:00');
+          const isSunday = dateObj.getDay() === 0;
+          initialConfigs[m.id] = { 
+            acolitos: isMatriz ? 3 : (isSunday ? 2 : 1), 
+            coroinhas: isMatriz ? 4 : 2 
+          };
+        });
+        setAutoConfigs(initialConfigs);
+      }
+      if (selectedMassesForAuto.size === 0) {
+        setSelectedMassesForAuto(new Set(masses.map((m: any) => m.id)));
+      }
     }
   }, [isAutoModalOpen, masses]);
+
+  const toggleMassSelection = (id: string) => {
+    const newSet = new Set(selectedMassesForAuto);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedMassesForAuto(newSet);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedMassesForAuto.size === masses.length) {
+      setSelectedMassesForAuto(new Set());
+    } else {
+      setSelectedMassesForAuto(new Set(masses.map((m: any) => m.id)));
+    }
+  };
 
   const selectedMass = masses.find((m: any) => m.id === selectedMassId);
   const selectedMassAssignments = useMemo(() => {
@@ -2530,24 +2552,46 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
               </div>
 
               <div className="flex-1 overflow-y-auto p-8 pt-4 thin-scrollbar space-y-4">
-                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-6">
-                  <p className="text-[10px] font-bold text-indigo-600 uppercase text-center leading-relaxed">
+                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-[10px] font-bold text-indigo-600 uppercase text-center sm:text-left leading-relaxed max-w-sm">
                     Configure a quantidade de servidores para cada missa abaixo. 
-                    O sistema tentará preencher as vagas automaticamente respeitando as regras de rodízio e preferências.
+                    O sistema tentará preencher as vagas automaticamente.
                   </p>
+                  <button 
+                    onClick={toggleSelectAll}
+                    className="px-4 py-2 bg-white border border-indigo-200 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                  >
+                    {selectedMassesForAuto.size === masses.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                  </button>
                 </div>
 
                 <div className="space-y-3">
                    {masses.map((m: any) => {
+                     const isSelected = selectedMassesForAuto.has(m.id);
                      const config = autoConfigs[m.id] || { acolitos: 1, coroinhas: 2 };
                      return (
-                       <div key={m.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                         <div className="space-y-1">
-                           <p className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter">{m.date} • {m.time}</p>
-                           <h4 className="text-xs font-bold text-slate-700 uppercase leading-tight truncate max-w-[250px]">{m.title}</h4>
+                       <div 
+                         key={m.id} 
+                         className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                           isSelected ? 'bg-white border-indigo-100 shadow-md ring-1 ring-indigo-50' : 'bg-slate-50 opacity-60 grayscale-[0.5] border-slate-100'
+                         }`}
+                       >
+                         <div className="flex items-center gap-4">
+                           <button 
+                             onClick={() => toggleMassSelection(m.id)}
+                             className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all border ${
+                               isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-transparent'
+                             }`}
+                           >
+                             <Check size={14} strokeWidth={4} />
+                           </button>
+                           <div className="space-y-1">
+                             <p className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter">{m.date} • {m.time}</p>
+                             <h4 className="text-xs font-bold text-slate-700 uppercase leading-tight truncate max-w-[200px]">{m.title}</h4>
+                           </div>
                          </div>
                          
-                         <div className="flex items-center gap-6">
+                         <div className={`flex items-center gap-6 transition-all ${isSelected ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
                            <div className="space-y-2">
                              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block text-center">Acólitos</label>
                              <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-slate-200">
@@ -2586,13 +2630,18 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
 
               <div className="p-8 border-t border-slate-50 bg-slate-50/50 shrink-0">
                 <button 
+                  disabled={selectedMassesForAuto.size === 0}
                   onClick={() => {
-                    autoSchedule(autoConfigs);
+                    const filteredConfigs: Record<string, { acolitos: number, coroinhas: number }> = {};
+                    selectedMassesForAuto.forEach(id => {
+                      filteredConfigs[id] = autoConfigs[id];
+                    });
+                    autoSchedule(filteredConfigs);
                     setIsAutoModalOpen(false);
                   }}
-                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all flex items-center justify-center gap-3"
+                  className="w-full py-4 bg-indigo-600 disabled:bg-slate-300 text-white rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all flex items-center justify-center gap-3"
                 >
-                  <Layers size={18} /> Iniciar Montagem Automática
+                  <Layers size={18} /> Iniciar Montagem ({selectedMassesForAuto.size})
                 </button>
               </div>
             </motion.div>
