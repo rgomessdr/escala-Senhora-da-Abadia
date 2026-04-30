@@ -39,6 +39,7 @@ import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
 import { Server, Mass, View, ServerRole, Community } from './types';
 import type { User } from '@supabase/supabase-js';
+import logo from './logo.png';
 
 // --- Error Handling ---
 enum OperationType {
@@ -67,11 +68,11 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
         </div>
       ) : (
         <img 
-          src="/logo.png" 
+          src={logo} 
           alt="Logo Paróquia" 
           className="w-full h-full object-contain"
           onError={() => {
-            console.error("Logo failed to load at /logo.png");
+            console.error("Logo failed to load using imported asset");
             setHasError(true);
           }}
           loading="eager"
@@ -231,12 +232,16 @@ export default function App() {
       setIsClerkKey(true);
     }
 
-    checkSupabaseConnection().then((res) => {
+    const checkConn = async () => {
+      const res = await checkSupabaseConnection();
       setConnStatus(res);
       if (!res.success && (res.message.includes('não encontrada') || res.message.includes('INVÁLIDA'))) {
         setShowSqlSetup(true);
       }
-    });
+      setLoading(false);
+    };
+
+    checkConn();
   }, []);
 
   const handleEmailLogin = async (email: string, pass: string) => {
@@ -1070,7 +1075,7 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex items-center gap-4">
-          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <LogoImage size={50} className="drop-shadow-md" />
           <div className="space-y-1">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
             <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Administradores</h1>
@@ -1326,6 +1331,12 @@ function AuthView({
             </form>
 
             <div className="text-center pt-2 space-y-4">
+              {connStatus && (
+                <div className={`text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 ${connStatus.success ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${connStatus.success ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                  {connStatus.success ? 'Banco de Dados Conectado' : 'Erro de Conexão com Banco'}
+                </div>
+              )}
               <button 
                 onClick={() => {
                   setIsRegistering(!isRegistering);
@@ -1686,23 +1697,64 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
   const [whatsapp, setWhatsapp] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        // Remove header if it exists
+        const dataLines = lines[0].toLowerCase().includes('nome') ? lines.slice(1) : lines;
+        
+        for (const line of dataLines) {
+          const [importName, importType, importEmail, importWhatsapp] = line.split(',').map(s => s.trim());
+          if (importName) {
+            await onAdd({ 
+              name: importName, 
+              type: (importType?.toLowerCase().includes('acolito') ? 'acolito' : 'coroinha'), 
+              email: importEmail || '', 
+              whatsapp: importWhatsapp || '' 
+            });
+          }
+        }
+        alert('Importação concluída com sucesso!');
+      } catch (err) {
+        alert('Erro ao processar arquivo. Certifique-se de que é um CSV válido (Nome, Tipo, E-mail, WhatsApp).');
+      } finally {
+        setIsImporting(false);
+        if (e.target) e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    if (editingId) {
-      onUpdate(editingId, { name, type, email, whatsapp, birthDate });
-      setEditingId(null);
-    } else {
-      onAdd({ name, type, email, whatsapp, birthDate });
-    }
+    try {
+      if (editingId) {
+        await onUpdate(editingId, { name, type, email, whatsapp, birthDate });
+        setEditingId(null);
+      } else {
+        await onAdd({ name, type, email, whatsapp, birthDate });
+      }
 
-    setName('');
-    setEmail('');
-    setWhatsapp('');
-    setBirthDate('');
-    setType('coroinha');
+      setName('');
+      setEmail('');
+      setWhatsapp('');
+      setBirthDate('');
+      setType('coroinha');
+    } catch (err) {
+      // Error handled by onAdd/onUpdate
+    }
   };
 
   const startEdit = (s: any) => {
@@ -1735,14 +1787,29 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
         {isAdmin && (
           <div className="lg:col-span-1">
             <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
-                  <UserPlus size={20} />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+                    <UserPlus size={20} />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
+                    {editingId ? 'Editar Membro' : 'Cadastro Manual'}
+                  </h2>
                 </div>
-                <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
-                  {editingId ? 'Editar Membro' : 'Cadastro Manual'}
-                </h2>
+                
+                {!editingId && (
+                  <label className="cursor-pointer p-2 hover:bg-slate-50 rounded-lg transition-colors border border-dashed border-slate-200 group/import">
+                    <input type="file" accept=".csv" onChange={handleImportCSV} className="hidden" />
+                    <Download size={16} className="text-slate-400 group-hover/import:text-indigo-600" title="Importar CSV" />
+                  </label>
+                )}
               </div>
+
+              {isImporting && (
+                <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase tracking-widest animate-pulse flex items-center justify-center gap-2">
+                  <Loader2 size={14} className="animate-spin" /> Processando Importação...
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div className="space-y-1.5">
