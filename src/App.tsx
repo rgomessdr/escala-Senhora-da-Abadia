@@ -418,7 +418,7 @@ export default function App() {
   };
 
   // Actions
-  const addServer = async (data: { name: string, type: ServerRole, email?: string, whatsapp?: string, birthDate?: string, familyId?: string }) => {
+  const addServer = async (data: { name: string, type: ServerRole, email?: string, whatsapp?: string, birthDate?: string }) => {
     if (!user) return;
     try {
       const { error } = await sdb.servers.insert({
@@ -536,18 +536,6 @@ export default function App() {
     const category = role === 'acolito' ? 'acolitos' : 'coroinhas';
     const exists = mass.assignments[category].includes(serverId);
 
-    // --- SIBLING WARNING ---
-    if (!exists && server.familyId) {
-      const allAssignedIds = [...mass.assignments.acolitos, ...mass.assignments.coroinhas];
-      const assignedSibling = servers.find(s => allAssignedIds.includes(s.id) && s.familyId === server.familyId);
-      
-      if (assignedSibling) {
-        if (!window.confirm(`AVISO: O familiar de ${server.name} (${assignedSibling.name}) já está escalado nesta missa. Deseja escalar ambos?`)) {
-          return;
-        }
-      }
-    }
-
     const updatedList = exists 
       ? mass.assignments[category].filter(id => id !== serverId)
       : [...mass.assignments[category], serverId];
@@ -599,16 +587,6 @@ export default function App() {
       const tryAssign = (server: Server, currentAcolitos: string[], currentCoroinhas: string[]) => {
         if (currentAcolitos.includes(server.id) || currentCoroinhas.includes(server.id)) return { allowed: false };
         if (peopleAssignedOnDate[mass.date].has(server.id)) return { allowed: false };
-
-        // --- SIBLING RULE ---
-        if (server.familyId) {
-          const alreadyAssignedIds = [...currentAcolitos, ...currentCoroinhas];
-          const hasSiblingAssigned = alreadyAssignedIds.some(id => {
-            const assignedServer = servers.find(s => s.id === id);
-            return assignedServer && assignedServer.familyId === server.familyId;
-          });
-          if (hasSiblingAssigned) return { allowed: false };
-        }
 
         const n = server.name;
         const loc = mass.location.toLowerCase();
@@ -797,7 +775,6 @@ export default function App() {
           <NavTab active={view === 'communities'} onClick={() => setView('communities')} label="Comunidades" />
           <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
           {isSuperAdmin && <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />}
-          {isAdmin && <NavTab active={view === 'database'} onClick={() => setShowSqlSetup(true)} label="Banco" />}
           <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label={isAdmin ? "Montar Escala" : "Ver Escalas"} />
           <NavTab active={view === 'profile'} onClick={() => setView('profile')} label={user.user_metadata?.display_name || 'Meu Perfil'} />
         </div>
@@ -845,7 +822,6 @@ export default function App() {
                 <NavButtonView active={view === 'communities'} onClick={() => { setView('communities'); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label="Comunidades" />
                 <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<Church size={18} />} label="Missas" />
                 {isSuperAdmin && <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Administradores" />}
-                {isAdmin && <NavButtonView active={view === 'database'} onClick={() => { setShowSqlSetup(true); setIsSidebarOpen(false); }} icon={<Layers size={18} />} label="Banco" />}
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
                 <NavButtonView active={view === 'profile'} onClick={() => { setView('profile'); setIsSidebarOpen(false); }} icon={<Settings size={18} />} label="Meu Perfil" />
               </div>
@@ -1660,8 +1636,6 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
   const [email, setEmail] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [familyId, setFamilyId] = useState('');
-  const [siblingSearch, setSiblingSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1669,18 +1643,16 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     if (!name.trim()) return;
 
     if (editingId) {
-      onUpdate(editingId, { name, type, email, whatsapp, birthDate, familyId });
+      onUpdate(editingId, { name, type, email, whatsapp, birthDate });
       setEditingId(null);
     } else {
-      onAdd({ name, type, email, whatsapp, birthDate, familyId });
+      onAdd({ name, type, email, whatsapp, birthDate });
     }
 
     setName('');
     setEmail('');
     setWhatsapp('');
     setBirthDate('');
-    setFamilyId('');
-    setSiblingSearch('');
     setType('coroinha');
   };
 
@@ -1691,8 +1663,6 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     setEmail(s.email || '');
     setWhatsapp(s.whatsapp || '');
     setBirthDate(s.birthDate || '');
-    setFamilyId(s.familyId || '');
-    setSiblingSearch('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1766,124 +1736,6 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                     className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
                   />
                 </div>
-
-                <div className="space-y-1.5 relative">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1.5">
-                     Vínculo Familiar (Irmãos)
-                     <span className="text-[8px] bg-slate-100 px-1 rounded text-slate-500">Opcional</span>
-                  </label>
-                  
-                  {/* Visualização de quem já está no grupo */}
-                  {familyId && (
-                    <div className="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
-                          <Users size={12} />
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-black text-indigo-700 uppercase leading-none">{familyId}</p>
-                          <p className="text-[8px] font-bold text-indigo-400 uppercase mt-0.5">
-                            {servers.filter((s: any) => s.familyId === familyId).length} membros vinculados
-                          </p>
-                        </div>
-                      </div>
-                      <button 
-                        type="button"
-                        onClick={() => setFamilyId('')}
-                        className="p-1 hover:bg-indigo-100 rounded text-indigo-400 transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="relative">
-                    <input 
-                      type="text" 
-                      value={siblingSearch}
-                      onFocus={() => { if(!siblingSearch) setSiblingSearch(' '); }}
-                      onChange={e => setSiblingSearch(e.target.value)}
-                      placeholder="Pesquisar por nome para vincular..."
-                      className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">
-                      <Search size={16} />
-                    </div>
-                  </div>
-
-                  {/* Resultados da busca simplificada */}
-                  {(siblingSearch.length > 0) && (
-                    <div className="mt-2 bg-white border border-slate-100 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-20 relative">
-                      <div className="max-h-56 overflow-y-auto thin-scrollbar">
-                        {servers
-                          .filter((s: any) => 
-                            s.id !== editingId && 
-                            (siblingSearch.trim() === '' || s.name?.toLowerCase().includes(siblingSearch.toLowerCase()))
-                          )
-                          .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
-                          .slice(0, 20)
-                          .map((s: any) => {
-                            const isAlreadyLinked = s.familyId && familyId === s.familyId;
-                            return (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={() => {
-                                  let effectiveFamilyId = s.familyId;
-                                  if (!effectiveFamilyId) {
-                                    const lastName = s.name.split(' ').pop();
-                                    effectiveFamilyId = `Família ${lastName}`;
-                                    // Sincroniza o outro membro também
-                                    onUpdate(s.id, { familyId: effectiveFamilyId });
-                                  }
-                                  
-                                  setFamilyId(effectiveFamilyId);
-                                  setSiblingSearch('');
-                                }}
-                                disabled={isAlreadyLinked}
-                                className={`w-full p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors text-left border-b border-slate-50 last:border-0 ${isAlreadyLinked ? 'bg-indigo-50/30' : ''}`}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${isAlreadyLinked ? 'bg-indigo-100 text-indigo-400' : 'bg-slate-100 text-slate-400'}`}>
-                                    {s.name ? s.name[0] : '?'}
-                                  </div>
-                                  <div>
-                                    <p className={`text-xs font-bold ${isAlreadyLinked ? 'text-indigo-600' : 'text-slate-700'}`}>{s.name}</p>
-                                    <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">
-                                      {s.familyId ? `No grupo: ${s.familyId}` : s.type}
-                                    </p>
-                                  </div>
-                                </div>
-                                {!isAlreadyLinked && (
-                                  <div className="p-1.5 px-3 bg-white border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
-                                    Vincular
-                                  </div>
-                                )}
-                              </button>
-                            );
-                          })
-                        }
-                        {servers.filter((s: any) => (siblingSearch.trim() === '' || s.name?.toLowerCase().includes(siblingSearch.toLowerCase()))).length === 0 && (
-                          <div className="p-6 text-center">
-                            <p className="text-slate-400 italic text-[10px] mb-1">Nenhum membro encontrado.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {!familyId && !siblingSearch && (
-                    <div className="p-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 mt-2">
-                       <p className="text-[9px] text-slate-400 font-bold uppercase text-center">
-                         Pesquise acima para encontrar irmãos e criar um vínculo familiar.
-                       </p>
-                    </div>
-                  )}
-
-                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 ml-1 leading-tight italic">
-                    Irmãos vinculados não serão escalados na mesma missa para ajudar os pais.
-                  </p>
-                </div>
                 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Função</label>
@@ -1933,11 +1785,6 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                            {s.type}
                          </span>
                          <span className="text-[10px] font-mono font-bold text-slate-400">{stats[s.id] || 0} Missas</span>
-                         {s.familyId && (
-                           <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 border border-rose-100 text-rose-600 uppercase tracking-widest flex items-center gap-1">
-                             <Users size={8} /> {s.familyId}
-                           </span>
-                         )}
                       </div>
                       {(s.whatsapp || s.email || s.birthDate) && (
                         <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 font-medium">

@@ -8,7 +8,6 @@ export interface Server {
   email?: string;
   whatsapp?: string;
   birthDate?: string;
-  familyId?: string;
   ownerId: string;
 }
 
