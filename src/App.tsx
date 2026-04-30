@@ -1626,6 +1626,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
   const [whatsapp, setWhatsapp] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [familyId, setFamilyId] = useState('');
+  const [siblingSearch, setSiblingSearch] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1644,6 +1645,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     setWhatsapp('');
     setBirthDate('');
     setFamilyId('');
+    setSiblingSearch('');
     setType('coroinha');
   };
 
@@ -1655,6 +1657,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     setWhatsapp(s.whatsapp || '');
     setBirthDate(s.birthDate || '');
     setFamilyId(s.familyId || '');
+    setSiblingSearch('');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1734,81 +1737,115 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                      Vínculo Familiar (Irmãos)
                      <span className="text-[8px] bg-slate-100 px-1 rounded text-slate-500">Opcional</span>
                   </label>
-                  <div className="relative group/family">
+                  
+                  {/* Visualização de quem já está no grupo */}
+                  {familyId && (
+                    <div className="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white">
+                          <Users size={12} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-indigo-700 uppercase leading-none">{familyId}</p>
+                          <p className="text-[8px] font-bold text-indigo-400 uppercase mt-0.5">
+                            {servers.filter((s: any) => s.familyId === familyId).length} membros vinculados
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => setFamilyId('')}
+                        className="p-1 hover:bg-indigo-100 rounded text-indigo-400 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="relative">
                     <input 
                       type="text" 
-                      value={familyId}
-                      onChange={e => setFamilyId(e.target.value)}
-                      placeholder="Ex: Família Silva ou Nome do Irmão"
+                      value={siblingSearch}
+                      onFocus={() => { if(!siblingSearch) setSiblingSearch(' '); }}
+                      onChange={e => setSiblingSearch(e.target.value)}
+                      placeholder="Toque para ver a lista ou pesquisar irmão..."
                       className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">
-                      <Users size={16} />
+                      <Search size={16} />
                     </div>
                   </div>
 
-                  {/* Gerenciador de Grupos Familiares */}
-                  {servers.length > 0 && (
-                    <div className="space-y-3 mt-4">
-                      <div className="flex items-center justify-between px-1">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Grupos Existentes</p>
-                        <span className="text-[8px] font-bold text-slate-400">{Array.from(new Set(servers.filter((s: any) => s.familyId).map((s: any) => s.familyId))).length} grupos</span>
-                      </div>
-                      
-                      <div className="max-h-48 overflow-y-auto pr-2 space-y-2 thin-scrollbar">
-                        {Array.from(new Set(servers.filter((s: any) => s.familyId).map((s: any) => s.familyId))).sort().map((fam: any) => {
-                          const familyMembers = servers.filter((s: any) => s.familyId === fam);
-                          const isSelected = familyId === fam;
-                          return (
-                            <div 
-                              key={fam}
-                              className={`p-3 rounded-xl border transition-all cursor-pointer group/item ${isSelected ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200' : 'bg-white border-slate-100 hover:border-indigo-100 hover:shadow-sm'}`}
-                              onClick={() => setFamilyId(fam)}
-                            >
-                              <div className="flex justify-between items-start mb-1.5">
-                                <span className={`text-[10px] font-black uppercase tracking-tight ${isSelected ? 'text-indigo-700' : 'text-slate-700'}`}>{fam}</span>
-                                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
-                                  {familyMembers.length} membros
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap gap-1">
-                                {familyMembers.map((m: any) => (
-                                  <span key={m.id} className="text-[8px] font-medium text-slate-400 bg-slate-50/50 px-1 rounded border border-slate-100/50">
-                                    {m.name.split(' ')[0]} {m.name.split(' ')[1]?.charAt(0)}.
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-
-                        {/* Opção para Vincular a outro Membro Solo */}
-                        <div className="mt-4 pt-4 border-t border-slate-50">
-                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-1">Ou vincule com um membro individual:</p>
-                           <div className="grid grid-cols-2 gap-2">
-                             {servers.filter((s: any) => !s.familyId && s.id !== editingId).slice(0, 6).map((s: any) => (
-                               <button
-                                 key={s.id}
-                                 type="button"
-                                 onClick={() => {
-                                   const newFamilyName = `Família ${s.name.split(' ').pop()}`;
-                                   setFamilyId(newFamilyName);
-                                   onUpdate(s.id, { familyId: newFamilyName });
-                                 }}
-                                 className="p-2 text-left bg-white border border-slate-100 rounded-lg hover:border-indigo-100 transition-all group/solo"
-                               >
-                                 <p className="text-[9px] font-bold text-slate-600 group-hover:text-indigo-600 truncate">{s.name}</p>
-                                 <p className="text-[7px] text-slate-400 uppercase font-black">Iniciar Grupo</p>
-                               </button>
-                             ))}
-                           </div>
-                        </div>
+                  {/* Resultados da busca simplificada */}
+                  {(siblingSearch.length > 0) && (
+                    <div className="mt-2 bg-white border border-slate-100 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-20 relative">
+                      <div className="max-h-56 overflow-y-auto thin-scrollbar">
+                        {servers
+                          .filter((s: any) => 
+                            s.id !== editingId && 
+                            (siblingSearch.trim() === '' || s.name.toLowerCase().includes(siblingSearch.toLowerCase()))
+                          )
+                          .sort((a: any, b: any) => a.name.localeCompare(b.name))
+                          .slice(0, 15)
+                          .map((s: any) => {
+                            const isAlreadyLinked = s.familyId && familyId === s.familyId;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  let effectiveFamilyId = s.familyId;
+                                  if (!effectiveFamilyId) {
+                                    effectiveFamilyId = `Família ${s.name.split(' ').pop()}`;
+                                    onUpdate(s.id, { familyId: effectiveFamilyId });
+                                  }
+                                  
+                                  setFamilyId(effectiveFamilyId);
+                                  setSiblingSearch('');
+                                }}
+                                disabled={isAlreadyLinked}
+                                className={`w-full p-3 flex items-center justify-between hover:bg-indigo-50 transition-colors text-left border-b border-slate-50 last:border-0 ${isAlreadyLinked ? 'bg-indigo-50/30' : ''}`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${isAlreadyLinked ? 'bg-indigo-100 text-indigo-400' : 'bg-slate-100 text-slate-400'}`}>
+                                    {s.name.charAt(0)}
+                                  </div>
+                                  <div>
+                                    <p className={`text-xs font-bold ${isAlreadyLinked ? 'text-indigo-600' : 'text-slate-700'}`}>{s.name}</p>
+                                    <p className="text-[8px] font-black uppercase text-slate-400 tracking-tighter">
+                                      {s.familyId ? `No grupo: ${s.familyId}` : s.type}
+                                    </p>
+                                  </div>
+                                </div>
+                                {!isAlreadyLinked && (
+                                  <div className="p-1.5 px-3 bg-white border border-indigo-100 text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm">
+                                    Vincular
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })
+                        }
+                        {servers.filter((s: any) => (siblingSearch.trim() === '' || s.name.toLowerCase().includes(siblingSearch.toLowerCase()))).length === 0 && (
+                          <div className="p-6 text-center">
+                            <p className="text-slate-400 italic text-[10px] mb-1">Nenhum membro encontrado.</p>
+                            <p className="text-[8px] font-black text-slate-300 uppercase">Tente pesquisar por outro nome</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
                   
-                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 ml-1 leading-tight italic">
-                    Ao colocar o mesmo nome de um grupo para dois ou mais membros, o sistema evitará escalá-los na mesma celebração.
+                  {!familyId && !siblingSearch && (
+                    <div className="p-3 bg-slate-50/50 rounded-xl border border-dashed border-slate-200 mt-2">
+                       <p className="text-[9px] text-slate-400 font-bold uppercase text-center">
+                         Pesquise acima para encontrar irmãos e criar um vínculo familiar.
+                       </p>
+                    </div>
+                  )}
+
+                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-2 ml-1 leading-tight italic">
+                    Irmãos vinculados não serão escalados na mesma missa para ajudar os pais.
                   </p>
                 </div>
                 
