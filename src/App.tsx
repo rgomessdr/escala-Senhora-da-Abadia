@@ -860,7 +860,7 @@ export default function App() {
                 <NavButtonView active={view === 'dashboard'} onClick={() => { setView('dashboard'); setIsSidebarOpen(false); }} icon={<LayoutDashboard size={18} />} label="Dashboard" />
                 <NavButtonView active={view === 'members'} onClick={() => { setView('members'); setIsSidebarOpen(false); }} icon={<Users size={18} />} label="Membros" />
                 <NavButtonView active={view === 'communities'} onClick={() => { setView('communities'); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label="Comunidades" />
-                <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<Church size={18} />} label="Missas" />
+                <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<LogoImage size={18} />} label="Missas" />
                 {isSuperAdmin && <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Administradores" />}
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
                 <NavButtonView active={view === 'profile'} onClick={() => { setView('profile'); setIsSidebarOpen(false); }} icon={<Settings size={18} />} label="Meu Perfil" />
@@ -1361,7 +1361,7 @@ function DashboardView({
     <div className="space-y-10">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex items-center gap-4">
-          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <LogoImage size={50} className="drop-shadow-md" />
           <div className="space-y-1">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Global</p>
             <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Dashboard</h1>
@@ -1539,8 +1539,8 @@ function ProfileView({ user }: { user: any }) {
 
   return (
     <div className="space-y-8 pb-20">
-      <header className="flex items-center gap-4">
-        <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+      <header className="flex items-center gap-4 shadow-sm pb-4 md:shadow-none md:pb-0">
+        <LogoImage size={50} className="drop-shadow-md" />
         <div className="space-y-1">
           <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gerenciamento de Conta</p>
           <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Meu Perfil</h1>
@@ -1719,7 +1719,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex items-center gap-4">
-          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <LogoImage size={50} className="drop-shadow-md" />
           <div className="space-y-1">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão de Pessoas</p>
             <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Equipe Litúrgica</h1>
@@ -1927,7 +1927,7 @@ function CommunitiesView({ communities, onAdd, onUpdate, onDelete, isAdmin }: an
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex items-center gap-4">
-          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <LogoImage size={50} className="drop-shadow-md" />
           <div className="space-y-1">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Territorial</p>
             <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Comunidades</h1>
@@ -2102,7 +2102,7 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="flex items-center gap-4">
-          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <LogoImage size={50} className="drop-shadow-md" />
           <div className="space-y-1">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Agenda Litúrgica</p>
             <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Celebrações</h1>
@@ -2300,7 +2300,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
     <div className="space-y-8 flex-1 flex flex-col h-full overflow-hidden">
       <header className="flex h-fit flex-col md:flex-row md:items-end justify-between gap-6 shrink-0">
         <div className="flex items-center gap-4">
-          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <LogoImage size={50} className="drop-shadow-md" />
           <div className="space-y-1">
             <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Operação de Altar</p>
             <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Montagem de Escala</h1>
