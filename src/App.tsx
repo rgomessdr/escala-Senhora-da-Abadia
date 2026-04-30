@@ -50,25 +50,29 @@ enum OperationType {
   WRITE = 'write',
 }
 
-// Function to handle image with fallback
-const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => (
-  <div className={`flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
-    <img 
-      src="/logo.png" 
-      alt="Logo N. Sra. da Abadia" 
-      className="w-full h-full object-contain"
-      onError={(e) => {
-        // Fallback to Icon if image doesn't exist yet
-        e.currentTarget.style.display = 'none';
-        const parent = e.currentTarget.parentElement;
-        if (parent) {
-          const iconSize = Math.max(16, size / 2);
-          parent.innerHTML = `<div class="w-full h-full bg-indigo-700 rounded-lg flex items-center justify-center text-white"><svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-church"><path d="m18 7 4 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="m18 7-5-4-5 4"/><path d="M12 3v19"/></svg></div>`;
-        }
-      }}
-    />
-  </div>
-);
+// Componente de logo com fallback automático
+const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => {
+  const [hasError, setHasError] = useState(false);
+  
+  const iconSize = Math.max(16, size / 2);
+
+  return (
+    <div className={`flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
+      {hasError ? (
+        <div className="w-full h-full bg-indigo-700 rounded-lg flex items-center justify-center text-white shadow-md">
+          <Church size={iconSize} />
+        </div>
+      ) : (
+        <img 
+          src="/logo.png" 
+          alt="Logo N. Sra. da Abadia" 
+          className="w-full h-full object-contain"
+          onError={() => setHasError(true)}
+        />
+      )}
+    </div>
+  );
+};
 
 function handleSupabaseError(error: any, operationType: OperationType, context: string | null) {
   console.error(`Supabase ${operationType} Error on ${context}:`, error);
