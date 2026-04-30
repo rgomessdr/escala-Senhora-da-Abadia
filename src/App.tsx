@@ -770,7 +770,7 @@ export default function App() {
           </div>
           <div className="hidden sm:block">
             <h1 className="text-sm font-bold tracking-tight text-slate-800 uppercase leading-none flex items-center gap-2">
-              Abadia Sidrolândia
+              N. Sra. da Abadia • Sidrolândia
               {connStatus && (
                 <div 
                   className={`flex items-center gap-2 px-2 py-1 rounded-full text-[10px] uppercase font-bold tracking-tight transition-all cursor-help border ${
@@ -786,7 +786,7 @@ export default function App() {
                 </div>
               )}
             </h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Gestão de Escalas • MS</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Rua Sergipe, 240 • Centro • 79170-000</p>
           </div>
         </div>
 
@@ -1356,6 +1356,40 @@ function DashboardView({
         <StatCardV2 label="Servidores Ativos" value={servers.length} icon={<Users className="text-indigo-600" />} color="indigo" />
         <StatCardV2 label="Missas Planejadas" value={masses.length} icon={<Church className="text-blue-600" />} color="blue" />
         <StatCardV2 label="Pendências de Equilíbrio" value={unassigned.length} icon={<AlertCircle className="text-rose-600" />} color="rose" alert={unassigned.length > 0} />
+      </div>
+
+      <div className="glass-card p-6 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-3xl flex flex-col md:flex-row items-center justify-between gap-8 border-0 shadow-2xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+        <div className="flex flex-col md:flex-row items-center gap-6 relative z-10 w-full md:w-auto text-center md:text-left">
+          <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-inner">
+            <Church size={40} className="text-indigo-200" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-[10px] font-black text-indigo-300 uppercase tracking-widest leading-none">Dados Institucionais</h3>
+            <h2 className="text-2xl font-display font-black tracking-tight text-white">Paróquia Nossa Senhora da Abadia</h2>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-2">
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-300 uppercase tracking-tight">
+                <MapPin size={12} className="text-indigo-400" /> Rua Sergipe, 240, Centro, Sidrolândia
+              </span>
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-300 uppercase tracking-tight">
+                <Shield size={12} className="text-indigo-400" /> Arquidiocese de Campo Grande
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-4 relative z-10 w-full md:w-auto">
+          <div className="flex flex-col bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 min-w-[160px]">
+            <span className="text-[9px] font-black text-indigo-300 uppercase tracking-widest mb-1">Pároco</span>
+            <span className="text-sm font-bold text-white uppercase leading-tight">Frei Paulo Henrique Rodrighero</span>
+            <span className="text-[8px] font-black text-slate-400 mt-1 uppercase tracking-tighter">OFMCap</span>
+          </div>
+          <div className="flex flex-col bg-white/5 backdrop-blur-sm p-4 rounded-2xl border border-white/10 min-w-[160px]">
+            <span className="text-[9px] font-black text-indigo-300 uppercase tracking-widest mb-1">Vigário</span>
+            <span className="text-sm font-bold text-white uppercase leading-tight">Frei Everaldo Teixeira do Couto</span>
+            <span className="text-[8px] font-black text-slate-400 mt-1 uppercase tracking-tighter">OFMCap</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
@@ -1952,6 +1986,26 @@ function CommunitiesView({ communities, onAdd, onUpdate, onDelete, isAdmin }: an
   const [name, setName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  const OFFICIAL_COMMUNITIES = [
+    'Matriz Nossa Senhora da Abadia',
+    'Capela São Sebastião (Bolicho Seco)',
+    'Capela São Pedro (São Pedro)',
+    'Capela São Paulo Apóstolo (Eldorado/Sede)',
+    'Capela São Leopoldo Mandic (Capão Bonito I)',
+    'Capela São João Batista (Flórida)',
+    'Capela São José (Capão Bonito II)',
+    'Capela São João Batista (Eldorado 800)',
+    'Capela São Francisco de Assis (Quebra Coco)',
+    'Capela Santo Expedito (Estrela)',
+    'Capela Santo Antonio (Capão Bonito II)'
+  ];
+
+  const handleAddOfficial = (name: string) => {
+    if (!communities.some((c: any) => c.name.toLowerCase() === name.toLowerCase())) {
+      onAdd(name);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -2023,32 +2077,71 @@ function CommunitiesView({ communities, onAdd, onUpdate, onDelete, isAdmin }: an
 
         <div className={isAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
           {communities.length === 0 ? (
-            <div className="h-64 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center px-10">
-              <MapPin size={48} className="text-slate-100 mb-4" />
-              <p className="font-bold text-slate-400">Nenhuma comunidade cadastrada.</p>
+            <div className="flex flex-col gap-6">
+              <div className="h-48 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center px-10">
+                <MapPin size={48} className="text-slate-100 mb-4" />
+                <p className="font-bold text-slate-400">Nenhuma comunidade cadastrada.</p>
+              </div>
+              
+              {isAdmin && (
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Importar Comunidades Oficiais</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {OFFICIAL_COMMUNITIES.map(comm => (
+                      <button 
+                        key={comm} 
+                        onClick={() => handleAddOfficial(comm)}
+                        className="p-3 text-left bg-slate-50 border border-slate-100 rounded-xl hover:border-indigo-100 hover:text-indigo-600 transition-all font-bold text-[10px] uppercase tracking-tight flex items-center justify-between group"
+                      >
+                        {comm}
+                        <Plus size={14} className="opacity-0 group-hover:opacity-100" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {communities.map((c: any) => (
-                <div key={c.id} className="glass-card p-5 flex items-center justify-between group">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 font-bold">
-                      <MapPin size={18} />
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {communities.map((c: any) => (
+                  <div key={c.id} className="glass-card p-5 flex items-center justify-between group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 font-bold">
+                        <MapPin size={18} />
+                      </div>
+                      <h4 className="font-bold text-slate-800 uppercase text-sm tracking-tight">{c.name}</h4>
                     </div>
-                    <h4 className="font-bold text-slate-800 uppercase text-sm tracking-tight">{c.name}</h4>
+                    {isAdmin && (
+                      <div className="flex gap-1 transform opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEdit(c)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                          <ChevronRight size={18} />
+                        </button>
+                        <button onClick={() => onDelete(c.id)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {isAdmin && (
-                    <div className="flex gap-1 transform opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => startEdit(c)} className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
-                        <ChevronRight size={18} />
+                ))}
+              </div>
+              
+              {isAdmin && communities.length < OFFICIAL_COMMUNITIES.length && (
+                <div className="pt-8 border-t border-slate-100">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Sugestões (Ainda não cadastradas)</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {OFFICIAL_COMMUNITIES.filter(name => !communities.some((c: any) => c.name.toLowerCase() === name.toLowerCase())).map(comm => (
+                      <button 
+                        key={comm} 
+                        onClick={() => handleAddOfficial(comm)}
+                        className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition-colors text-[9px] font-bold uppercase tracking-tight"
+                      >
+                        + {comm}
                       </button>
-                      <button onClick={() => onDelete(c.id)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  )}
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
