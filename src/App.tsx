@@ -57,20 +57,22 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
   const iconSize = Math.max(16, size / 2);
 
   return (
-    <div className={`flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
+    <div 
+      className={`flex items-center justify-center overflow-hidden shrink-0 ${className}`} 
+      style={{ width: size, height: size }}
+    >
       {hasError ? (
-        <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-soft">
+        <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-inner">
           <Church size={iconSize} />
         </div>
       ) : (
         <img 
-          src="/logo.png?v=3" 
+          src="/logo.png" 
           alt="Logo Paróquia" 
-          className="w-full h-full object-contain drop-shadow-sm transition-opacity duration-300"
-          onError={() => setHasError(true)}
-          onLoad={(e) => {
-            // Se carregar, garante que a opacidade seja 1 (caso tenha animação)
-            e.currentTarget.style.opacity = '1';
+          className="w-full h-full object-contain"
+          onError={() => {
+            console.error("Logo failed to load at /logo.png");
+            setHasError(true);
           }}
           loading="eager"
         />
@@ -1358,9 +1360,12 @@ function DashboardView({
   return (
     <div className="space-y-10">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Global</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Dashboard</h1>
+        <div className="flex items-center gap-4">
+          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Global</p>
+            <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Dashboard</h1>
+          </div>
         </div>
           <div className="flex gap-3">
             <button onClick={() => setView('schedule')} className="group flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
@@ -1534,9 +1539,12 @@ function ProfileView({ user }: { user: any }) {
 
   return (
     <div className="space-y-8 pb-20">
-      <header className="space-y-1">
-        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gerenciamento de Conta</p>
-        <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Meu Perfil</h1>
+      <header className="flex items-center gap-4">
+        <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+        <div className="space-y-1">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gerenciamento de Conta</p>
+          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Meu Perfil</h1>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1710,9 +1718,12 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão de Pessoas</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Equipe Litúrgica</h1>
+        <div className="flex items-center gap-4">
+          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão de Pessoas</p>
+            <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Equipe Litúrgica</h1>
+          </div>
         </div>
         <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200">
            <button onClick={() => setType('acolito')} className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${type === 'acolito' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-800'}`}>Acólitos</button>
@@ -1915,9 +1926,12 @@ function CommunitiesView({ communities, onAdd, onUpdate, onDelete, isAdmin }: an
   return (
     <div className="space-y-8">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Territorial</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Comunidades</h1>
+        <div className="flex items-center gap-4">
+          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Gestão Territorial</p>
+            <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Comunidades</h1>
+          </div>
         </div>
       </header>
 
@@ -2087,9 +2101,12 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Agenda Litúrgica</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Celebrações</h1>
+        <div className="flex items-center gap-4">
+          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Agenda Litúrgica</p>
+            <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Celebrações</h1>
+          </div>
         </div>
       </header>
 
@@ -2282,9 +2299,12 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
   return (
     <div className="space-y-8 flex-1 flex flex-col h-full overflow-hidden">
       <header className="flex h-fit flex-col md:flex-row md:items-end justify-between gap-6 shrink-0">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Operação de Altar</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Montagem de Escala</h1>
+        <div className="flex items-center gap-4">
+          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Operação de Altar</p>
+            <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Montagem de Escala</h1>
+          </div>
         </div>
         <div className="flex gap-2">
           {isAdmin && (
