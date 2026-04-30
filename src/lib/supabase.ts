@@ -74,6 +74,7 @@ export const db = {
         email: item.email,
         whatsapp: item.whatsapp,
         birth_date: item.birthDate || item.birth_date,
+        family_id: item.familyId || item.family_id,
         owner_id: item.owner_id || item.ownerId
       }));
       return supabase.from('servers').insert(payload).select();
@@ -86,6 +87,7 @@ export const db = {
       if (data.email !== undefined) payload.email = data.email;
       if (data.whatsapp !== undefined) payload.whatsapp = data.whatsapp;
       if (data.birthDate !== undefined) payload.birth_date = data.birthDate;
+      if (data.familyId !== undefined) payload.family_id = data.familyId;
       return supabase.from('servers').update(payload).eq('id', id);
     },
     delete: (id: string) => supabase.from('servers').delete().eq('id', id),

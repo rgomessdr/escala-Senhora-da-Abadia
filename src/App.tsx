@@ -88,6 +88,7 @@ CREATE TABLE servers (
   email TEXT,
   whatsapp TEXT,
   birth_date DATE,
+  family_id TEXT,
   owner_id UUID DEFAULT auth.uid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -309,6 +310,7 @@ export default function App() {
         email: s.email,
         whatsapp: s.whatsapp,
         birthDate: s.birth_date,
+        familyId: s.family_id,
         ownerId: s.owner_id
       })));
 
@@ -402,7 +404,7 @@ export default function App() {
   };
 
   // Actions
-  const addServer = async (data: { name: string, type: ServerRole, email?: string, whatsapp?: string, birthDate?: string }) => {
+  const addServer = async (data: { name: string, type: ServerRole, email?: string, whatsapp?: string, birthDate?: string, familyId?: string }) => {
     if (!user) return;
     try {
       const { error } = await sdb.servers.insert({
@@ -514,10 +516,24 @@ export default function App() {
 
   const toggleAssignment = async (massId: string, serverId: string, role: ServerRole) => {
     const mass = masses.find(m => m.id === massId);
-    if (!mass) return;
+    const server = servers.find(s => s.id === serverId);
+    if (!mass || !server) return;
 
     const category = role === 'acolito' ? 'acolitos' : 'coroinhas';
     const exists = mass.assignments[category].includes(serverId);
+
+    // --- SIBLING WARNING ---
+    if (!exists && server.familyId) {
+      const allAssignedIds = [...mass.assignments.acolitos, ...mass.assignments.coroinhas];
+      const assignedSibling = servers.find(s => allAssignedIds.includes(s.id) && s.familyId === server.familyId);
+      
+      if (assignedSibling) {
+        if (!window.confirm(`AVISO: O familiar de ${server.name} (${assignedSibling.name}) já está escalado nesta missa. Deseja escalar ambos?`)) {
+          return;
+        }
+      }
+    }
+
     const updatedList = exists 
       ? mass.assignments[category].filter(id => id !== serverId)
       : [...mass.assignments[category], serverId];
@@ -566,9 +582,19 @@ export default function App() {
       let newAcolitos = [...mass.assignments.acolitos];
       let newCoroinhas = [...mass.assignments.coroinhas];
 
-      const tryAssign = (server: Server, currentList: string[]) => {
-        if (currentList.includes(server.id)) return false;
-        if (peopleAssignedOnDate[mass.date].has(server.id)) return false;
+      const tryAssign = (server: Server, currentAcolitos: string[], currentCoroinhas: string[]) => {
+        if (currentAcolitos.includes(server.id) || currentCoroinhas.includes(server.id)) return { allowed: false };
+        if (peopleAssignedOnDate[mass.date].has(server.id)) return { allowed: false };
+
+        // --- SIBLING RULE ---
+        if (server.familyId) {
+          const alreadyAssignedIds = [...currentAcolitos, ...currentCoroinhas];
+          const hasSiblingAssigned = alreadyAssignedIds.some(id => {
+            const assignedServer = servers.find(s => s.id === id);
+            return assignedServer && assignedServer.familyId === server.familyId;
+          });
+          if (hasSiblingAssigned) return { allowed: false };
+        }
 
         const n = server.name;
         const loc = mass.location.toLowerCase();
@@ -578,9 +604,9 @@ export default function App() {
 
         // --- ACOLITOS RULES ---
         if (server.type === 'acolito') {
-          if (n.includes("Andrey Henrique") && !isSunday) return false;
-          if (n.includes("Júlia Machado") && dayOfWeek === 4) return false;
-          if (n.includes("Gabrielly Matos") && ![0, 6].includes(dayOfWeek)) return false;
+          if (n.includes("Andrey Henrique") && !isSunday) return { allowed: false };
+          if (n.includes("Júlia Machado") && dayOfWeek === 4) return { allowed: false };
+          if (n.includes("Gabrielly Matos") && ![0, 6].includes(dayOfWeek)) return { allowed: false };
           
           if (n.includes("Eric Padilha")) {
             if (dayOfWeek === 3 && weekOfMonth === 1 && loc.includes('matriz') && t === "19:00") isForced = true; 
@@ -598,23 +624,23 @@ export default function App() {
         // --- COROINHAS RULES ---
         if (server.type === 'coroinha') {
           if (n.includes("Antonio Carlos") && dayOfWeek === 0 && weekOfMonth === 3 && loc.includes('matriz') && t === "07:30") isForced = true;
-          if (n.includes("Júlia Prates") && !isSunday) return false;
-          if (n.includes("Beatriz Barbier") && (!isSunday || weekOfMonth === 3 || t === "07:30" || t === "19:00")) return false;
-          if (n.includes("Carolina Pasinatto") && (!isSunday || (!loc.includes('matriz') && !loc.includes('aparecida')))) return false;
+          if (n.includes("Júlia Prates") && !isSunday) return { allowed: false };
+          if (n.includes("Beatriz Barbier") && (!isSunday || weekOfMonth === 3 || t === "07:30" || t === "19:00")) return { allowed: false };
+          if (n.includes("Carolina Pasinatto") && (!isSunday || (!loc.includes('matriz') && !loc.includes('aparecida')))) return { allowed: false };
           if (n.includes("Ana Sofia")) {
              if (dayOfWeek === 3 && weekOfMonth === 3 && t === "19:30") isForced = true;
              if (dayOfWeek === 0 && weekOfMonth === 1 && loc.includes('matriz') && t === "10:00") isForced = true;
              if (dayOfWeek === 6 && weekOfMonth === 5 && loc.includes('pedro') && t === "19:00") isForced = true;
              if (dayOfWeek === 2 && weekOfMonth === 2 && loc.includes('caacupe') && t === "19:00") isForced = true;
-             if (dayOfWeek === 0 && weekOfMonth === 4 && loc.includes('matriz') && t === "10:00") return false;
+             if (dayOfWeek === 0 && weekOfMonth === 4 && loc.includes('matriz') && t === "10:00") return { allowed: false };
           }
           
           const count = currentStats[server.id] || 0;
-          if (n.includes("Elisa Patron") && count >= 2) return false;
-          if (n.includes("Luiza Carraro") && count >= 1 && dayOfWeek === 3) return false;
-          if (n.includes("Maria Fernanda Moraes") && count >= 1) return false;
-          if (n.includes("Nicole Maria") && count >= 1) return false;
-          if (n.includes("Renata Valentina") && count >= 1) return false;
+          if (n.includes("Elisa Patron") && count >= 2) return { allowed: false };
+          if (n.includes("Luiza Carraro") && count >= 1 && dayOfWeek === 3) return { allowed: false };
+          if (n.includes("Maria Fernanda Moraes") && count >= 1) return { allowed: false };
+          if (n.includes("Nicole Maria") && count >= 1) return { allowed: false };
+          if (n.includes("Renata Valentina") && count >= 1) return { allowed: false };
         }
 
         return { allowed: true, isForced };
@@ -624,7 +650,7 @@ export default function App() {
       if (newAcolitos.length < acolitosTarget) {
         const needed = acolitosTarget - newAcolitos.length;
         const available = servers
-          .map(s => ({ s, ...tryAssign(s, newAcolitos) }))
+          .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas) }))
           .filter(res => res.allowed)
           .sort((a, b) => {
             if (a.isForced && !b.isForced) return -1;
@@ -651,7 +677,7 @@ export default function App() {
       if (newCoroinhas.length < coroinhasTarget) {
         const needed = coroinhasTarget - newCoroinhas.length;
         const available = servers
-          .map(s => ({ s, ...tryAssign(s, newCoroinhas) }))
+          .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas) }))
           .filter(res => res.allowed)
           .sort((a, b) => {
             if (a.isForced && !b.isForced) return -1;
@@ -1584,6 +1610,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
   const [email, setEmail] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [familyId, setFamilyId] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -1591,16 +1618,17 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     if (!name.trim()) return;
 
     if (editingId) {
-      onUpdate(editingId, { name, type, email, whatsapp, birthDate });
+      onUpdate(editingId, { name, type, email, whatsapp, birthDate, familyId });
       setEditingId(null);
     } else {
-      onAdd({ name, type, email, whatsapp, birthDate });
+      onAdd({ name, type, email, whatsapp, birthDate, familyId });
     }
 
     setName('');
     setEmail('');
     setWhatsapp('');
     setBirthDate('');
+    setFamilyId('');
     setType('coroinha');
   };
 
@@ -1611,6 +1639,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     setEmail(s.email || '');
     setWhatsapp(s.whatsapp || '');
     setBirthDate(s.birthDate || '');
+    setFamilyId(s.familyId || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1684,6 +1713,23 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                     className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
                   />
                 </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1.5">
+                     Identificador de Família
+                     <span className="text-[8px] bg-slate-100 px-1 rounded text-slate-500">Opcional</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    value={familyId}
+                    onChange={e => setFamilyId(e.target.value)}
+                    placeholder="Ex: Família Silva"
+                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                  />
+                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 ml-1 leading-tight italic">
+                    Irmãos com o mesmo identificador não serão escalados na mesma missa.
+                  </p>
+                </div>
                 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Função</label>
@@ -1733,6 +1779,11 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                            {s.type}
                          </span>
                          <span className="text-[10px] font-mono font-bold text-slate-400">{stats[s.id] || 0} Missas</span>
+                         {s.familyId && (
+                           <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-rose-50 border border-rose-100 text-rose-600 uppercase tracking-widest flex items-center gap-1">
+                             <Users size={8} /> {s.familyId}
+                           </span>
+                         )}
                       </div>
                       {(s.whatsapp || s.email || s.birthDate) && (
                         <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 font-medium">
@@ -2187,6 +2238,13 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                         {servers.sort((a:any, b:any) => (stats[a.id] || 0) - (stats[b.id] || 0)).map((s: any) => {
                           const count = stats[s.id] || 0;
                           const isAssigned = selectedMass.assignments.acolitos.includes(s.id) || selectedMass.assignments.coroinhas.includes(s.id);
+                          
+                          // Check if a sibling is assigned
+                          const assignedSibling = s.familyId && !isAssigned && servers.find((serv: any) => 
+                            (selectedMass.assignments.acolitos.includes(serv.id) || selectedMass.assignments.coroinhas.includes(serv.id)) && 
+                            serv.familyId === s.familyId
+                          );
+
                           return (
                             <button
                               key={s.id}
@@ -2205,8 +2263,11 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                                   {s.name[0]}
                                 </div>
                                 <div>
-                                  <p className="text-xs font-bold leading-none mb-1">{s.name}</p>
-                                  <p className={`text-[8px] font-black uppercase tracking-widest leading-none ${isAssigned ? 'text-indigo-200' : 'text-slate-300'}`}>{s.type}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-xs font-bold leading-none">{s.name}</p>
+                                    {assignedSibling && <AlertCircle size={10} className="text-rose-500" title={`Familiar (${assignedSibling.name}) já escalado`} />}
+                                  </div>
+                                  <p className={`text-[8px] font-black uppercase tracking-widest leading-none mt-1 ${isAssigned ? 'text-indigo-200' : 'text-slate-300'}`}>{s.type}</p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
