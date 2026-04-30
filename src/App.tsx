@@ -31,7 +31,8 @@ import {
   Settings,
   User as UserIcon,
   Lock,
-  Shield
+  Shield,
+  Crown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
@@ -48,6 +49,26 @@ enum OperationType {
   GET = 'get',
   WRITE = 'write',
 }
+
+// Function to handle image with fallback
+const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => (
+  <div className={`flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
+    <img 
+      src="/logo.png" 
+      alt="Logo N. Sra. da Abadia" 
+      className="w-full h-full object-contain"
+      onError={(e) => {
+        // Fallback to Icon if image doesn't exist yet
+        e.currentTarget.style.display = 'none';
+        const parent = e.currentTarget.parentElement;
+        if (parent) {
+          const iconSize = Math.max(16, size / 2);
+          parent.innerHTML = `<div class="w-full h-full bg-indigo-700 rounded-lg flex items-center justify-center text-white"><svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-church"><path d="m18 7 4 2v11a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9l4-2"/><path d="M14 22v-4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v4"/><path d="m18 7-5-4-5 4"/><path d="M12 3v19"/></svg></div>`;
+        }
+      }}
+    />
+  </div>
+);
 
 function handleSupabaseError(error: any, operationType: OperationType, context: string | null) {
   console.error(`Supabase ${operationType} Error on ${context}:`, error);
@@ -750,13 +771,7 @@ export default function App() {
       {/* Top Navigation Bar */}
       <nav className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between shadow-sm z-30 sticky top-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 flex items-center justify-center p-1">
-            <img 
-              src="https://storage.googleapis.com/static-gcp-957774136979207a6d96/mary_logo.png" 
-              alt="N. Sra. da Abadia" 
-              className="w-full h-full object-contain"
-            />
-          </div>
+          <LogoImage size={42} className="transform hover:scale-110 transition-transform" />
           <div className="hidden sm:block">
             <h1 className="text-sm font-bold tracking-tight text-slate-800 uppercase leading-none flex items-center gap-2">
               N. Sra. da Abadia • Sidrolândia
@@ -1211,12 +1226,8 @@ function AuthView({
       <div className="flex-1 flex items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-24 h-24 flex items-center justify-center mb-6 transform hover:scale-105 transition-transform cursor-default relative">
-              <img 
-                src="https://storage.googleapis.com/static-gcp-957774136979207a6d96/mary_logo.png" 
-                alt="Logo N. Sra. da Abadia" 
-                className="w-full h-full object-contain drop-shadow-2xl"
-              />
+            <div className="mb-6 transform hover:scale-105 transition-transform cursor-default relative">
+              <LogoImage size={96} className="drop-shadow-2xl" />
               <div className="absolute -top-1 -right-1 bg-amber-400 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-indigo-900 shadow-sm z-10">
                 <span className="text-[10px] font-black">MS</span>
               </div>
