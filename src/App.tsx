@@ -1371,15 +1371,15 @@ function DashboardView({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <StatCardV2 label="Servidores Ativos" value={servers.length} icon={<Users className="text-indigo-600" />} color="indigo" />
-        <StatCardV2 label="Missas Planejadas" value={masses.length} icon={<Church className="text-blue-600" />} color="blue" />
+        <StatCardV2 label="Missas Planejadas" value={masses.length} icon={<LogoImage size={24} />} color="blue" />
         <StatCardV2 label="Pendências de Equilíbrio" value={unassigned.length} icon={<AlertCircle className="text-rose-600" />} color="rose" alert={unassigned.length > 0} />
       </div>
 
       <div className="glass-card p-6 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-3xl flex flex-col md:flex-row items-center justify-between gap-8 border-0 shadow-2xl relative overflow-hidden">
         <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
         <div className="flex flex-col md:flex-row items-center gap-6 relative z-10 w-full md:w-auto text-center md:text-left">
-          <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-inner">
-            <Church size={40} className="text-indigo-200" />
+          <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-inner overflow-hidden">
+            <LogoImage size={60} />
           </div>
           <div className="space-y-1">
             <h3 className="text-[10px] font-black text-indigo-300 uppercase tracking-widest leading-none">Dados Institucionais</h3>
@@ -2098,8 +2098,8 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
           <div className="lg:col-span-1">
             <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-                    <Church size={20} />
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 overflow-hidden">
+                    <LogoImage size={32} />
                   </div>
                   <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">
                     {editingId ? 'Editar Evento' : 'Novo Evento'}
@@ -2463,8 +2463,8 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                                  <MapPin size={12} className="text-indigo-400" /> {selectedMass.location}
                                </p>
                             </div>
-                            <div className="bg-indigo-600 text-white p-3 rounded-2xl shadow-xl shadow-indigo-100">
-                               <Church size={24} />
+                            <div className="bg-indigo-600 text-white p-3 rounded-2xl shadow-xl shadow-indigo-100 overflow-hidden">
+                               <LogoImage size={40} />
                             </div>
                          </div>
                       </div>
