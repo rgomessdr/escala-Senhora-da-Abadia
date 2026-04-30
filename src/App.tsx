@@ -2291,7 +2291,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
             <p className="text-sm text-slate-400 max-w-xs text-center mt-2 px-6">Para montar as escalas, você precisa ter missas cadastradas no sistema.</p>
          </div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col gap-8">
+        <div className="flex-1 min-h-0 flex flex-col gap-6">
            {/* Horizonal Mass Selector */}
            <div className="relative group shrink-0">
              <div 
@@ -2302,48 +2302,53 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                  <button
                    key={m.id}
                    onClick={() => setSelectedMassId(m.id)}
-                   className={`group flex-shrink-0 w-[240px] p-5 rounded-[2rem] border transition-all text-left snap-start ${
-                     selectedMassId === m.id ? 'bg-white border-indigo-600 shadow-2xl shadow-indigo-100 ring-4 ring-indigo-50/50' : 'bg-white opacity-60 hover:opacity-100 border-slate-100'
+                   className={`group flex-shrink-0 w-[200px] p-4 rounded-3xl border transition-all text-left snap-start ${
+                     selectedMassId === m.id ? 'bg-white border-indigo-600 shadow-xl ring-2 ring-indigo-50' : 'bg-white/50 hover:bg-white border-slate-100'
                    }`}
                  >
-                   <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 flex items-center justify-between">
-                     {m.date} <span className="text-slate-300">|</span> {m.time}
-                   </p>
-                   <h4 className="text-base font-bold text-slate-900 leading-tight mb-4 min-h-[2.5rem] line-clamp-2 uppercase tracking-tight">{m.title}</h4>
-                   <div className="flex -space-x-2">
-                      {Array.from({ length: Math.min(m.assignments.acolitos.length + m.assignments.coroinhas.length, 6) }).map((_, i) => (
-                        <div key={i} className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-black text-indigo-600">
-                          {i + 1}
-                        </div>
-                      ))}
-                      {(m.assignments.acolitos.length + m.assignments.coroinhas.length) > 6 && (
-                        <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-white flex items-center justify-center text-[8px] font-black text-white">
-                          +{ (m.assignments.acolitos.length + m.assignments.coroinhas.length) - 6 }
-                        </div>
-                      )}
-                      {m.assignments.acolitos.length + m.assignments.coroinhas.length === 0 && (
-                        <div className="w-full text-[10px] font-black text-slate-300 uppercase italic tracking-widest text-center mt-2 border border-dashed border-slate-100 py-1.5 rounded-lg">Sem escala</div>
-                      )}
+                   <div className="flex items-center justify-between mb-2">
+                     <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">{m.date}</p>
+                     <p className="text-[9px] font-black text-slate-300 uppercase">{m.time}</p>
+                   </div>
+                   <h4 className="text-sm font-bold text-slate-900 leading-tight mb-3 line-clamp-2 uppercase tracking-tight h-10">{m.title}</h4>
+                   <div className="flex items-center justify-between">
+                     <div className="flex -space-x-1.5">
+                        {Array.from({ length: Math.min(m.assignments.acolitos.length + m.assignments.coroinhas.length, 3) }).map((_, i) => (
+                          <div key={i} className="w-6 h-6 rounded-full bg-indigo-50 border-2 border-white flex items-center justify-center text-[9px] font-black text-indigo-600">
+                            {i + 1}
+                          </div>
+                        ))}
+                        {(m.assignments.acolitos.length + m.assignments.coroinhas.length) > 3 && (
+                          <div className="w-6 h-6 rounded-full bg-indigo-600 border-2 border-white flex items-center justify-center text-[8px] font-black text-white">
+                            +{ (m.assignments.acolitos.length + m.assignments.coroinhas.length) - 3 }
+                          </div>
+                        )}
+                     </div>
+                     {m.assignments.acolitos.length + m.assignments.coroinhas.length === 0 ? (
+                       <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest italic">Sem escala</span>
+                     ) : (
+                       <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest">{m.assignments.acolitos.length + m.assignments.coroinhas.length} Membros</span>
+                     )}
                    </div>
                  </button>
                ))}
              </div>
 
              {/* Scroll Buttons */}
-             <div className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden md:flex">
+             <div className="absolute -left-4 top-1/2 -translate-y-1/2 transition-opacity pointer-events-none hidden md:flex z-10">
                <button 
-                 onClick={() => document.getElementById('mass-selector')?.scrollBy({ left: -300, behavior: 'smooth' })}
-                 className="p-3 bg-white/90 backdrop-blur shadow-xl border border-slate-100 rounded-full text-slate-400 hover:text-indigo-600 active:scale-90 transition-all pointer-events-auto ml-2"
+                 onClick={() => document.getElementById('mass-selector')?.scrollBy({ left: -250, behavior: 'smooth' })}
+                 className="p-2.5 bg-white/95 backdrop-blur shadow-xl border border-slate-100 rounded-full text-slate-400 hover:text-indigo-600 active:scale-90 transition-all pointer-events-auto"
                >
-                 <ChevronRight size={24} className="rotate-180" />
+                 <ChevronRight size={18} className="rotate-180" />
                </button>
              </div>
-             <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden md:flex">
+             <div className="absolute -right-4 top-1/2 -translate-y-1/2 transition-opacity pointer-events-none hidden md:flex z-10">
                <button 
-                 onClick={() => document.getElementById('mass-selector')?.scrollBy({ left: 300, behavior: 'smooth' })}
-                 className="p-3 bg-white/90 backdrop-blur shadow-xl border border-slate-100 rounded-full text-slate-400 hover:text-indigo-600 active:scale-90 transition-all pointer-events-auto mr-2"
+                 onClick={() => document.getElementById('mass-selector')?.scrollBy({ left: 250, behavior: 'smooth' })}
+                 className="p-2.5 bg-white/95 backdrop-blur shadow-xl border border-slate-100 rounded-full text-slate-400 hover:text-indigo-600 active:scale-90 transition-all pointer-events-auto"
                >
-                 <ChevronRight size={24} />
+                 <ChevronRight size={18} />
                </button>
              </div>
            </div>
