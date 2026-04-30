@@ -57,17 +57,18 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
   const iconSize = Math.max(16, size / 2);
 
   return (
-    <div className={`flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
+    <div className={`flex items-center justify-center overflow-hidden ${className}`} style={{ width: size, height: size }}>
       {hasError ? (
         <div className="w-full h-full bg-indigo-700 rounded-lg flex items-center justify-center text-white shadow-md">
           <Church size={iconSize} />
         </div>
       ) : (
         <img 
-          src="/logo.png" 
+          src="/logo.png?v=2" 
           alt="Logo N. Sra. da Abadia" 
           className="w-full h-full object-contain"
           onError={() => setHasError(true)}
+          loading="eager"
         />
       )}
     </div>
@@ -1060,7 +1061,7 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Segurança Paroquial</p>
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">SmartInfo Tecnologia e Softwares</p>
           <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Administradores</h1>
         </div>
       </header>
@@ -1325,7 +1326,7 @@ function AuthView({
 
               <div className="pt-4 border-t border-slate-100">
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight leading-relaxed max-w-[200px] mx-auto text-center">
-                  Segurança Paroquial • MS
+                  Desenvolvedor SmartInfo Tecnologia e Softwares
                 </p>
               </div>
             </div>
