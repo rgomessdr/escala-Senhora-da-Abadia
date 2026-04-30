@@ -556,11 +556,16 @@ export default function App() {
     return Math.ceil(day / 7);
   };
 
-  const autoSchedule = async () => {
+  const autoSchedule = async (configs?: Record<string, { acolitos: number, coroinhas: number }>) => {
     if (!user || masses.length === 0 || servers.length === 0) return;
     
+    // Process only specific masses if config is provided, otherwise process all
+    const massesToProcess = configs 
+      ? masses.filter(m => configs[m.id]) 
+      : [...masses];
+
     // Sort masses by date and time to process chronologically
-    const sortedMasses = [...masses].sort((a, b) => {
+    const sortedMasses = massesToProcess.sort((a, b) => {
       const dateDiff = a.date.localeCompare(b.date);
       return dateDiff !== 0 ? dateDiff : a.time.localeCompare(b.time);
     });
@@ -577,9 +582,10 @@ export default function App() {
       const weekOfMonth = getWeekOfMonth(dateObj);
       const isSunday = dayOfWeek === 0;
 
-      // Targets based on rules
-      const acolitosTarget = isMatriz ? 3 : (isSunday ? 2 : 1);
-      const coroinhasTarget = isMatriz ? 4 : 2;
+      // Targets based on rules or config override
+      const config = configs ? configs[mass.id] : null;
+      const acolitosTarget = config ? config.acolitos : (isMatriz ? 3 : (isSunday ? 2 : 1));
+      const coroinhasTarget = config ? config.coroinhas : (isMatriz ? 4 : 2);
 
       let newAcolitos = [...mass.assignments.acolitos];
       let newCoroinhas = [...mass.assignments.coroinhas];
@@ -2162,6 +2168,26 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
 
 function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(masses[0]?.id || null);
+  const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
+  const [autoConfigs, setAutoConfigs] = useState<Record<string, { acolitos: number, coroinhas: number }>>({});
+
+  // Initialize configs if empty
+  useEffect(() => {
+    if (isAutoModalOpen && Object.keys(autoConfigs).length === 0) {
+      const initialConfigs: Record<string, { acolitos: number, coroinhas: number }> = {};
+      masses.forEach((m: any) => {
+        const isMatriz = m.location.toLowerCase().includes('matriz');
+        const dateObj = new Date(m.date + 'T12:00:00');
+        const isSunday = dateObj.getDay() === 0;
+        initialConfigs[m.id] = { 
+          acolitos: isMatriz ? 3 : (isSunday ? 2 : 1), 
+          coroinhas: isMatriz ? 4 : 2 
+        };
+      });
+      setAutoConfigs(initialConfigs);
+    }
+  }, [isAutoModalOpen, masses]);
+
   const selectedMass = masses.find((m: any) => m.id === selectedMassId);
   const selectedMassAssignments = useMemo(() => {
     if (!selectedMass) return { acolitos: [], coroinhas: [] };
@@ -2214,7 +2240,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                  Limpar Tudo
               </button>
               <button 
-                onClick={autoSchedule}
+                onClick={() => setIsAutoModalOpen(true)}
                 className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all"
               >
                  <Layers size={16} /> Montagem Inteligente
@@ -2475,6 +2501,104 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
            )}
         </div>
       )}
+
+      {/* Smart Assembly Modal */}
+      <AnimatePresence>
+        {isAutoModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAutoModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 border-b border-slate-50 flex items-center justify-between shrink-0">
+                <div>
+                  <h2 className="text-xl font-display font-black text-slate-900 leading-none">Montagem Inteligente</h2>
+                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-2">{masses.length} Missas Detectadas</p>
+                </div>
+                <button onClick={() => setIsAutoModalOpen(false)} className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 pt-4 thin-scrollbar space-y-4">
+                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 mb-6">
+                  <p className="text-[10px] font-bold text-indigo-600 uppercase text-center leading-relaxed">
+                    Configure a quantidade de servidores para cada missa abaixo. 
+                    O sistema tentará preencher as vagas automaticamente respeitando as regras de rodízio e preferências.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                   {masses.map((m: any) => {
+                     const config = autoConfigs[m.id] || { acolitos: 1, coroinhas: 2 };
+                     return (
+                       <div key={m.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                         <div className="space-y-1">
+                           <p className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter">{m.date} • {m.time}</p>
+                           <h4 className="text-xs font-bold text-slate-700 uppercase leading-tight truncate max-w-[250px]">{m.title}</h4>
+                         </div>
+                         
+                         <div className="flex items-center gap-6">
+                           <div className="space-y-2">
+                             <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block text-center">Acólitos</label>
+                             <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-slate-200">
+                               <button 
+                                 onClick={() => setAutoConfigs(prev => ({ ...prev, [m.id]: { ...config, acolitos: Math.max(0, config.acolitos - 1) } }))}
+                                 className="w-6 h-6 rounded bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                               >-</button>
+                               <span className="w-4 text-center text-xs font-black text-slate-800">{config.acolitos}</span>
+                               <button 
+                                 onClick={() => setAutoConfigs(prev => ({ ...prev, [m.id]: { ...config, acolitos: config.acolitos + 1 } }))}
+                                 className="w-6 h-6 rounded bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                               >+</button>
+                             </div>
+                           </div>
+                           
+                           <div className="space-y-2">
+                             <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block text-center">Coroinhas</label>
+                             <div className="flex items-center gap-2 bg-white rounded-lg p-1 border border-slate-200">
+                               <button 
+                                 onClick={() => setAutoConfigs(prev => ({ ...prev, [m.id]: { ...config, coroinhas: Math.max(0, config.coroinhas - 1) } }))}
+                                 className="w-6 h-6 rounded bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                               >-</button>
+                               <span className="w-4 text-center text-xs font-black text-slate-800">{config.coroinhas}</span>
+                               <button 
+                                 onClick={() => setAutoConfigs(prev => ({ ...prev, [m.id]: { ...config, coroinhas: config.coroinhas + 1 } }))}
+                                 className="w-6 h-6 rounded bg-slate-50 flex items-center justify-center text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                               >+</button>
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                     );
+                   })}
+                 </div>
+              </div>
+
+              <div className="p-8 border-t border-slate-50 bg-slate-50/50 shrink-0">
+                <button 
+                  onClick={() => {
+                    autoSchedule(autoConfigs);
+                    setIsAutoModalOpen(false);
+                  }}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all flex items-center justify-center gap-3"
+                >
+                  <Layers size={18} /> Iniciar Montagem Automática
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
