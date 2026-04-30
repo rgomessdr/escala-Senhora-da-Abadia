@@ -39,6 +39,7 @@ import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
 import { Server, Mass, View, ServerRole, Community } from './types';
 import type { User } from '@supabase/supabase-js';
+import logo from './logo.png';
 
 // --- Error Handling ---
 enum OperationType {
@@ -67,11 +68,11 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
         </div>
       ) : (
         <img 
-          src={`/logo.png?v=${new Date().getTime()}`} 
+          src={logo} 
           alt="Logo Paróquia" 
           className="w-full h-full object-contain"
           onError={() => {
-            console.error("Logo failed to load at /logo.png");
+            console.error("Logo static import failed");
             setHasError(true);
           }}
           loading="eager"
