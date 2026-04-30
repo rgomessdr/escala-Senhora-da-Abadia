@@ -900,8 +900,6 @@ export default function App() {
                 unassigned={unassignedServers} 
                 stats={serverStats} 
                 setView={setView} 
-                clearAllData={clearAllData} 
-                isDeleting={isDeleting}
                 isAdmin={isAdmin}
               />
             )}
@@ -1296,8 +1294,6 @@ function DashboardView({
   unassigned, 
   stats, 
   setView, 
-  clearAllData, 
-  isDeleting,
   isAdmin
 }: any) {
   return (
@@ -1308,14 +1304,6 @@ function DashboardView({
           <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Dashboard</h1>
         </div>
           <div className="flex gap-3">
-            <button 
-              onClick={clearAllData}
-              disabled={isDeleting}
-              className="flex items-center gap-2 px-5 py-3 bg-white border border-rose-200 text-rose-500 rounded-xl text-sm font-bold hover:bg-rose-50 transition-all disabled:opacity-50"
-            >
-               {isDeleting ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
-               {isDeleting ? 'Excluindo...' : 'Limpar Dados'}
-            </button>
             <button onClick={() => setView('schedule')} className="group flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all">
               <Calendar size={18} className="group-hover:rotate-12 transition-transform" /> Montar Nova Escala
             </button>
