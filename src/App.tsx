@@ -750,8 +750,12 @@ export default function App() {
       {/* Top Navigation Bar */}
       <nav className="h-16 bg-white border-b border-slate-200 px-4 md:px-8 flex items-center justify-between shadow-sm z-30 sticky top-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-700 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-            <Church size={22} />
+          <div className="w-10 h-10 flex items-center justify-center p-1">
+            <img 
+              src="https://storage.googleapis.com/static-gcp-957774136979207a6d96/mary_logo.png" 
+              alt="N. Sra. da Abadia" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="hidden sm:block">
             <h1 className="text-sm font-bold tracking-tight text-slate-800 uppercase leading-none flex items-center gap-2">
@@ -1207,9 +1211,13 @@ function AuthView({
       <div className="flex-1 flex items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-20 h-20 bg-indigo-700 rounded-[1.5rem] flex items-center justify-center text-white shadow-2xl shadow-indigo-200 mb-6 transform hover:rotate-3 transition-transform cursor-default relative">
-              <Church size={40} />
-              <div className="absolute -top-2 -right-2 bg-amber-400 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center text-indigo-900 shadow-sm">
+            <div className="w-24 h-24 flex items-center justify-center mb-6 transform hover:scale-105 transition-transform cursor-default relative">
+              <img 
+                src="https://storage.googleapis.com/static-gcp-957774136979207a6d96/mary_logo.png" 
+                alt="Logo N. Sra. da Abadia" 
+                className="w-full h-full object-contain drop-shadow-2xl"
+              />
+              <div className="absolute -top-1 -right-1 bg-amber-400 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-indigo-900 shadow-sm z-10">
                 <span className="text-[10px] font-black">MS</span>
               </div>
             </div>
