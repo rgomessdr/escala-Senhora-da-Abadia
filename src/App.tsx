@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Menu,
   X,
+  Search,
   LogOut,
   LogIn,
   Loader2,
@@ -439,7 +440,7 @@ export default function App() {
       if (error) throw error;
       fetchData();
     } catch (err) {
-      handleSupabaseError(err, OperationType.UPDATE, `servers/${id}`);
+      handleSupabaseError(err, OperationType.UPDATE, 'Servidor');
     }
   };
 
@@ -450,7 +451,7 @@ export default function App() {
       if (error) throw error;
       fetchData();
     } catch (err) {
-      handleSupabaseError(err, OperationType.DELETE, `servers/${id}`);
+      handleSupabaseError(err, OperationType.DELETE, 'Servidor');
     }
   };
 
@@ -1768,7 +1769,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                       value={siblingSearch}
                       onFocus={() => { if(!siblingSearch) setSiblingSearch(' '); }}
                       onChange={e => setSiblingSearch(e.target.value)}
-                      placeholder="Toque para ver a lista ou pesquisar irmão..."
+                      placeholder="Pesquisar por nome para vincular..."
                       className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">
@@ -1783,10 +1784,10 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                         {servers
                           .filter((s: any) => 
                             s.id !== editingId && 
-                            (siblingSearch.trim() === '' || s.name.toLowerCase().includes(siblingSearch.toLowerCase()))
+                            (siblingSearch.trim() === '' || s.name?.toLowerCase().includes(siblingSearch.toLowerCase()))
                           )
-                          .sort((a: any, b: any) => a.name.localeCompare(b.name))
-                          .slice(0, 15)
+                          .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
+                          .slice(0, 20)
                           .map((s: any) => {
                             const isAlreadyLinked = s.familyId && familyId === s.familyId;
                             return (
@@ -1796,7 +1797,9 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                                 onClick={() => {
                                   let effectiveFamilyId = s.familyId;
                                   if (!effectiveFamilyId) {
-                                    effectiveFamilyId = `Família ${s.name.split(' ').pop()}`;
+                                    const lastName = s.name.split(' ').pop();
+                                    effectiveFamilyId = `Família ${lastName}`;
+                                    // Sincroniza o outro membro também
                                     onUpdate(s.id, { familyId: effectiveFamilyId });
                                   }
                                   
@@ -1808,7 +1811,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                               >
                                 <div className="flex items-center gap-3">
                                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${isAlreadyLinked ? 'bg-indigo-100 text-indigo-400' : 'bg-slate-100 text-slate-400'}`}>
-                                    {s.name.charAt(0)}
+                                    {s.name ? s.name[0] : '?'}
                                   </div>
                                   <div>
                                     <p className={`text-xs font-bold ${isAlreadyLinked ? 'text-indigo-600' : 'text-slate-700'}`}>{s.name}</p>
@@ -1826,10 +1829,9 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                             );
                           })
                         }
-                        {servers.filter((s: any) => (siblingSearch.trim() === '' || s.name.toLowerCase().includes(siblingSearch.toLowerCase()))).length === 0 && (
+                        {servers.filter((s: any) => (siblingSearch.trim() === '' || s.name?.toLowerCase().includes(siblingSearch.toLowerCase()))).length === 0 && (
                           <div className="p-6 text-center">
                             <p className="text-slate-400 italic text-[10px] mb-1">Nenhum membro encontrado.</p>
-                            <p className="text-[8px] font-black text-slate-300 uppercase">Tente pesquisar por outro nome</p>
                           </div>
                         )}
                       </div>
@@ -1888,7 +1890,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                 <motion.div layout key={s.id} className="glass-card glass-card-hover p-5 flex items-center justify-between group">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg ${s.type === 'acolito' ? 'bg-indigo-600' : 'bg-blue-600'}`}>
-                      {s.name[0]}
+                      {s.name ? s.name[0] : '?'}
                     </div>
                     <div className="space-y-1">
                       <h4 className="font-bold text-slate-800 tracking-tight group-hover:text-indigo-600 transition-colors uppercase text-sm leading-none">{s.name}</h4>
