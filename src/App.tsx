@@ -39,7 +39,6 @@ import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
 
 import { Server, Mass, View, ServerRole, Community } from './types';
 import type { User } from '@supabase/supabase-js';
-import logo from './logo.png';
 
 // --- Error Handling ---
 enum OperationType {
@@ -68,11 +67,11 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
         </div>
       ) : (
         <img 
-          src={logo} 
+          src={`/logo.png?v=${new Date().getTime()}`} 
           alt="Logo Paróquia" 
           className="w-full h-full object-contain"
           onError={() => {
-            console.error("Logo failed to load using imported asset");
+            console.error("Logo failed to load at /logo.png");
             setHasError(true);
           }}
           loading="eager"
@@ -233,12 +232,19 @@ export default function App() {
     }
 
     const checkConn = async () => {
-      const res = await checkSupabaseConnection();
-      setConnStatus(res);
-      if (!res.success && (res.message.includes('não encontrada') || res.message.includes('INVÁLIDA'))) {
-        setShowSqlSetup(true);
+      try {
+        console.log("Checking Supabase connection...");
+        const res = await checkSupabaseConnection();
+        console.log("Connection result:", res);
+        setConnStatus(res);
+        if (!res.success && (res.message.includes('não encontrada') || res.message.includes('INVÁLIDA'))) {
+          setShowSqlSetup(true);
+        }
+      } catch (err) {
+        console.error("Failed to check connection:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     checkConn();
@@ -297,22 +303,27 @@ export default function App() {
   // Auth Listener
   useEffect(() => {
     const checkAuthStatus = async (currentUser: User | null) => {
-      if (currentUser && currentUser.email) {
-        const normalizedEmail = currentUser.email.toLowerCase();
-        const isSystemAdmin = SYSTEM_ADMINS.includes(normalizedEmail);
-        const { data } = await supabase.from('admin_users').select('email').eq('email', normalizedEmail).single();
-        
-        if (!data && !isSystemAdmin) {
-          supabase.auth.signOut();
-          setUser(null);
-          setAuthError('Usuário não autorizado no banco de dados.');
+      try {
+        if (currentUser && currentUser.email) {
+          const normalizedEmail = currentUser.email.toLowerCase();
+          const isSystemAdmin = SYSTEM_ADMINS.includes(normalizedEmail);
+          const { data } = await supabase.from('admin_users').select('email').eq('email', normalizedEmail).single();
+          
+          if (!data && !isSystemAdmin) {
+            await supabase.auth.signOut();
+            setUser(null);
+            setAuthError('Usuário não autorizado no banco de dados.');
+          } else {
+            setUser(currentUser);
+          }
         } else {
-          setUser(currentUser);
+          setUser(null);
         }
-      } else {
-        setUser(null);
+      } catch (err) {
+        console.error("Auth status check failed:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -777,6 +788,7 @@ export default function App() {
         onEmailRegister={handleEmailRegister}
         error={authError}
         onClearError={() => setAuthError(null)}
+        connStatus={connStatus}
       />
     );
   }
@@ -1218,12 +1230,14 @@ function AuthView({
   onEmailLogin, 
   onEmailRegister,
   error,
-  onClearError 
+  onClearError,
+  connStatus
 }: { 
   onEmailLogin: (email: string, pass: string) => void,
   onEmailRegister: (email: string, pass: string, name: string) => void,
   error: string | null,
-  onClearError: () => void
+  onClearError: () => void,
+  connStatus: { success: boolean, message: string } | null
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
