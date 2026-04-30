@@ -1714,20 +1714,86 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                   />
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 relative">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-1.5">
-                     Identificador de Família
+                     Vínculo Familiar (Irmãos)
                      <span className="text-[8px] bg-slate-100 px-1 rounded text-slate-500">Opcional</span>
                   </label>
-                  <input 
-                    type="text" 
-                    value={familyId}
-                    onChange={e => setFamilyId(e.target.value)}
-                    placeholder="Ex: Família Silva"
-                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
-                  />
+                  <div className="relative group/family">
+                    <input 
+                      type="text" 
+                      value={familyId}
+                      onChange={e => setFamilyId(e.target.value)}
+                      placeholder="Ex: Família Silva ou Nome do Irmão"
+                      className="w-full p-3 bg-slate-50 rounded-xl border border-slate-100 focus:border-indigo-500 focus:bg-white outline-none transition-all font-semibold"
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300">
+                      <Users size={16} />
+                    </div>
+                  </div>
+
+                  {/* Gerenciador de Grupos Familiares */}
+                  {servers.length > 0 && (
+                    <div className="space-y-3 mt-4">
+                      <div className="flex items-center justify-between px-1">
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Grupos Existentes</p>
+                        <span className="text-[8px] font-bold text-slate-400">{Array.from(new Set(servers.filter((s: any) => s.familyId).map((s: any) => s.familyId))).length} grupos</span>
+                      </div>
+                      
+                      <div className="max-h-48 overflow-y-auto pr-2 space-y-2 thin-scrollbar">
+                        {Array.from(new Set(servers.filter((s: any) => s.familyId).map((s: any) => s.familyId))).sort().map((fam: any) => {
+                          const familyMembers = servers.filter((s: any) => s.familyId === fam);
+                          const isSelected = familyId === fam;
+                          return (
+                            <div 
+                              key={fam}
+                              className={`p-3 rounded-xl border transition-all cursor-pointer group/item ${isSelected ? 'bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200' : 'bg-white border-slate-100 hover:border-indigo-100 hover:shadow-sm'}`}
+                              onClick={() => setFamilyId(fam)}
+                            >
+                              <div className="flex justify-between items-start mb-1.5">
+                                <span className={`text-[10px] font-black uppercase tracking-tight ${isSelected ? 'text-indigo-700' : 'text-slate-700'}`}>{fam}</span>
+                                <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}>
+                                  {familyMembers.length} membros
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1">
+                                {familyMembers.map((m: any) => (
+                                  <span key={m.id} className="text-[8px] font-medium text-slate-400 bg-slate-50/50 px-1 rounded border border-slate-100/50">
+                                    {m.name.split(' ')[0]} {m.name.split(' ')[1]?.charAt(0)}.
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Opção para Vincular a outro Membro Solo */}
+                        <div className="mt-4 pt-4 border-t border-slate-50">
+                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2 px-1">Ou vincule com um membro individual:</p>
+                           <div className="grid grid-cols-2 gap-2">
+                             {servers.filter((s: any) => !s.familyId && s.id !== editingId).slice(0, 6).map((s: any) => (
+                               <button
+                                 key={s.id}
+                                 type="button"
+                                 onClick={() => {
+                                   const newFamilyName = `Família ${s.name.split(' ').pop()}`;
+                                   setFamilyId(newFamilyName);
+                                   onUpdate(s.id, { familyId: newFamilyName });
+                                 }}
+                                 className="p-2 text-left bg-white border border-slate-100 rounded-lg hover:border-indigo-100 transition-all group/solo"
+                               >
+                                 <p className="text-[9px] font-bold text-slate-600 group-hover:text-indigo-600 truncate">{s.name}</p>
+                                 <p className="text-[7px] text-slate-400 uppercase font-black">Iniciar Grupo</p>
+                               </button>
+                             ))}
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <p className="text-[9px] text-slate-400 font-bold uppercase mt-1 ml-1 leading-tight italic">
-                    Irmãos com o mesmo identificador não serão escalados na mesma missa.
+                    Ao colocar o mesmo nome de um grupo para dois ou mais membros, o sistema evitará escalá-los na mesma celebração.
                   </p>
                 </div>
                 
