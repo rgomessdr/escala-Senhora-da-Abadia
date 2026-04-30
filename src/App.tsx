@@ -57,17 +57,21 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
   const iconSize = Math.max(16, size / 2);
 
   return (
-    <div className={`flex items-center justify-center overflow-hidden ${className}`} style={{ width: size, height: size }}>
+    <div className={`flex items-center justify-center ${className}`} style={{ width: size, height: size }}>
       {hasError ? (
-        <div className="w-full h-full bg-indigo-700 rounded-lg flex items-center justify-center text-white shadow-md">
+        <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-soft">
           <Church size={iconSize} />
         </div>
       ) : (
         <img 
-          src="/logo.png?v=2" 
-          alt="Logo N. Sra. da Abadia" 
-          className="w-full h-full object-contain"
+          src="/logo.png?v=3" 
+          alt="Logo Paróquia" 
+          className="w-full h-full object-contain drop-shadow-sm transition-opacity duration-300"
           onError={() => setHasError(true)}
+          onLoad={(e) => {
+            // Se carregar, garante que a opacidade seja 1 (caso tenha animação)
+            e.currentTarget.style.opacity = '1';
+          }}
           loading="eager"
         />
       )}
@@ -844,7 +848,10 @@ export default function App() {
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between pb-4 border-b">
-                <span className="font-bold text-slate-800 uppercase tracking-widest text-sm">Menu</span>
+                <div className="flex items-center gap-2">
+                  <LogoImage size={32} />
+                  <span className="font-bold text-slate-800 uppercase tracking-widest text-sm">Escalas</span>
+                </div>
                 <button onClick={() => setIsSidebarOpen(false)}><X size={24} className="text-slate-400" /></button>
               </div>
               <div className="space-y-2">
@@ -1060,9 +1067,12 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">SmartInfo Tecnologia e Softwares</p>
-          <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Administradores</h1>
+        <div className="flex items-center gap-4">
+          <LogoImage size={60} className="hidden md:flex drop-shadow-md" />
+          <div className="space-y-1">
+            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.3em]">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
+            <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Administradores</h1>
+          </div>
         </div>
       </header>
 
