@@ -47,17 +47,20 @@ enum OperationType {
   WRITE = 'write',
 }
 
-function handleSupabaseError(error: any, operationType: OperationType, path: string | null) {
-  console.error(`Supabase ${operationType} Error on ${path}:`, error);
+function handleSupabaseError(error: any, operationType: OperationType, context: string | null) {
+  console.error(`Supabase ${operationType} Error on ${context}:`, error);
   
   let msg = `Erro no banco de dados (${operationType}): ${error.message || 'Erro desconhecido'}`;
   
+  // Specific Supabase/PostgREST error codes
   if (error.code === 'PGRST204' || error.code === '42P01') {
-    msg = `⚠️ Erro Crítico: A tabela '${path}' não existe no Supabase. \n\nVocê precisa executar o comando SQL no painel do Supabase para criar as tabelas.`;
+    msg = `⚠️ Erro Crítico: A tabela ou recurso '${context}' não foi encontrado no Supabase. \n\nIsso geralmente acontece quando as tabelas ainda não foram criadas. Verifique o código SQL de configuração no início do arquivo App.tsx e execute-o no SQL Editor do Supabase.`;
+  } else if (error.code === '42703' || error.code === 'PGRST106') {
+    msg = `⚠️ Erro de Schema: Coluna ausente ou incompatível em '${context}'. \n\nVocê provavelmente adicionou um novo campo (como Vínculo Familiar) mas não atualizou o banco de dados. \n\nExecute novamente o script SQL do App.tsx no painel do Supabase para atualizar a estrutura das tabelas.`;
   } else if (error.code === '42501') {
-    msg = `⚠️ Erro de Permissão (RLS): Você não tem permissão para realizar esta ação na tabela '${path}'.`;
+    msg = `⚠️ Erro de Permissão (RLS): Você não tem permissão para realizar esta ação em '${context}'.`;
   } else if (error.code === 'PGRST301' || error.status === 401 || error.status === 403) {
-    msg = `⚠️ Erro de Autenticação: Sua chave do Supabase (ANON KEY) é inválida ou expirou. \n\nVerifique se você não colou uma chave do CLERK (que começa com sb_publishable) por engano.`;
+    msg = `⚠️ Erro de Autenticação: Sua chave do Supabase (ANON KEY) é inválida ou expirou. \n\nVerifique se você não colou uma chave do CLERK (que começa com sb_publishable) por engano nos segredos.`;
   }
   
   alert(msg);
@@ -74,13 +77,22 @@ const AUTHORIZED_EMAILS = [
 const SETUP_SQL = `-- ⚠️ IMPORTANTE: DESATIVE A TRADUÇÃO DO NAVEGADOR ANTES DE COPIAR!
 -- O código abaixo DEVE estar em INGLÊS para funcionar.
 
--- 1. LIMPAR TABELAS ANTIGAS (Garante que o novo formato seja aplicado)
-DROP TABLE IF EXISTS masses;
-DROP TABLE IF EXISTS servers;
-DROP TABLE IF EXISTS communities;
+-- ==========================================
+-- OPÇÃO A: MIGRAR (Se você já tem dados e só quer o novo campo)
+-- ==========================================
+-- ALTER TABLE servers ADD COLUMN IF NOT EXISTS family_id TEXT;
 
--- 2. CRIAR TABELAS PARA FUNCIONAMENTO DO SISTEMA
-CREATE TABLE servers (
+-- ==========================================
+-- OPÇÃO B: RESET TOTAL (CUIDADO! APAGA TUDO!)
+-- ==========================================
+-- Descomente as linhas abaixo se quiser recriar tudo do zero:
+
+-- DROP TABLE IF EXISTS masses;
+-- DROP TABLE IF EXISTS servers;
+-- DROP TABLE IF EXISTS communities;
+
+-- CRIAR TABELAS (Se não existirem)
+CREATE TABLE IF NOT EXISTS servers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('acolito', 'coroinha')),
@@ -93,14 +105,14 @@ CREATE TABLE servers (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE communities (
+CREATE TABLE IF NOT EXISTS communities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   owner_id UUID DEFAULT auth.uid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
-CREATE TABLE masses (
+CREATE TABLE IF NOT EXISTS masses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   date DATE NOT NULL,
@@ -111,12 +123,12 @@ CREATE TABLE masses (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 3. SEGURANÇA (RLS)
+-- SEGURANÇA (RLS)
 ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE masses ENABLE ROW LEVEL SECURITY;
 
--- 4. POLÍTICAS DE ACESSO
+-- POLÍTICAS DE ACESSO (Usando IF NOT EXISTS ou drop/create)
 DROP POLICY IF EXISTS "Acesso Total Servidores" ON servers;
 CREATE POLICY "Acesso Total Servidores" ON servers FOR ALL USING (true) WITH CHECK (true);
 
@@ -126,8 +138,7 @@ CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (true) WIT
 DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
 CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true) WITH CHECK (true);
 
--- 5. GERENCIAMENTO DE USUÁRIOS (EXTRA)
--- Adicionando roles: 'admin' (pode tudo) e 'usuario' (apenas visualiza)
+-- GERENCIAMENTO DE USUÁRIOS
 CREATE TABLE IF NOT EXISTS admin_users (
   email TEXT PRIMARY KEY,
   role TEXT DEFAULT 'usuario' CHECK (role IN ('admin', 'usuario')),
@@ -142,7 +153,9 @@ INSERT INTO admin_users (email, role) VALUES
 ON CONFLICT (email) DO UPDATE SET role = 'admin';
 
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Qualquer um logado vê admins" ON admin_users;
 CREATE POLICY "Qualquer um logado vê admins" ON admin_users FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Apenas super admins editam admins" ON admin_users;
 CREATE POLICY "Apenas super admins editam admins" ON admin_users FOR ALL USING (
   auth.email() IN ('rodrigogomessdr@gmail.com', 'diogoortega@gmail.com')
 );
@@ -783,6 +796,7 @@ export default function App() {
           <NavTab active={view === 'communities'} onClick={() => setView('communities')} label="Comunidades" />
           <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
           {isSuperAdmin && <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />}
+          {isAdmin && <NavTab active={view === 'database'} onClick={() => setShowSqlSetup(true)} label="Banco" />}
           <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label={isAdmin ? "Montar Escala" : "Ver Escalas"} />
           <NavTab active={view === 'profile'} onClick={() => setView('profile')} label={user.user_metadata?.display_name || 'Meu Perfil'} />
         </div>
@@ -829,7 +843,8 @@ export default function App() {
                 <NavButtonView active={view === 'members'} onClick={() => { setView('members'); setIsSidebarOpen(false); }} icon={<Users size={18} />} label="Membros" />
                 <NavButtonView active={view === 'communities'} onClick={() => { setView('communities'); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label="Comunidades" />
                 <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<Church size={18} />} label="Missas" />
-                {isSuperAdmin && <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Usuários" />}
+                {isSuperAdmin && <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Administradores" />}
+                {isAdmin && <NavButtonView active={view === 'database'} onClick={() => { setShowSqlSetup(true); setIsSidebarOpen(false); }} icon={<Layers size={18} />} label="Banco" />}
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
                 <NavButtonView active={view === 'profile'} onClick={() => { setView('profile'); setIsSidebarOpen(false); }} icon={<Settings size={18} />} label="Meu Perfil" />
               </div>
