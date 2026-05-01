@@ -62,15 +62,20 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
     let isMounted = true;
     const fetchLogo = async () => {
       try {
-        // Verificamos se o supabase está configurado antes de tentar buscar
         if (!supabase) return;
         
-        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'app_logo').single();
+        // Tentamos buscar, mas se falhar por falta de permissão ou tabela, apenas ignoramos
+        const { data, error } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'app_logo')
+          .single();
+          
         if (isMounted && !error && data && data.value) {
           setLogoUrl(data.value);
         }
       } catch (err) {
-        console.warn("Could not fetch custom logo, using default:", err);
+        // Silencioso para não travar o app
       }
     };
     fetchLogo();
@@ -1112,13 +1117,14 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any)
   const [password, setPassword] = useState('');
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [showSqlHelp, setShowSqlHelp] = useState(false);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 1024 * 500) { // Limit 500KB for Base64 storage
-      alert("A imagem é muito grande. Por favor, escolha uma imagem de até 500KB para melhor performance.");
+    if (file.size > 1024 * 500) { 
+      alert("A imagem é muito grande (máx 500KB).");
       return;
     }
 
@@ -1131,10 +1137,17 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any)
           .from('system_settings')
           .upsert({ key: 'app_logo', value: base64String });
         
-        if (error) throw error;
-        alert("Logo atualizada com sucesso!");
+        if (error) {
+          if (error.message.includes("not find the table")) {
+            setShowSqlHelp(true);
+            throw new Error("Tabela de configurações não encontrada. Veja as instruções abaixo.");
+          }
+          throw error;
+        }
+        alert("Logo atualizada!");
+        window.location.reload(); // Recarregar para garantir atualização em todos os componentes
       } catch (err: any) {
-        alert("Erro ao salvar logo: " + err.message);
+        alert(err.message);
       } finally {
         setLogoUploading(false);
       }
@@ -1279,10 +1292,33 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any)
                 </button>
               </div>
               
-              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg space-y-2">
                 <p className="text-[9px] text-amber-700 font-bold leading-relaxed uppercase tracking-tight">
-                  Dica: Use imagens PNG com fundo transparente. O sistema salva a imagem diretamente no banco de dados para garantir que ela apareça em todos os dispositivos.
+                  Dica: Use imagens PNG com fundo transparente (máx 500KB).
                 </p>
+                {showSqlHelp && (
+                  <div className="pt-2 border-t border-amber-200">
+                    <p className="text-[8px] text-rose-600 font-black uppercase mb-2">Ação Necessária no Supabase:</p>
+                    <pre className="bg-slate-900 text-slate-100 p-2 rounded text-[7px] overflow-x-auto font-mono">
+                      {`CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+INSERT INTO system_settings (key, value) VALUES ('app_logo', '/logotipo-principal.png') ON CONFLICT DO NOTHING;
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Config View" ON system_settings FOR SELECT USING (true);
+CREATE POLICY "Config Mod" ON system_settings FOR ALL USING (true);`}
+                    </pre>
+                    <p className="text-[8px] text-amber-600 mt-2 italic font-bold">Copie este código e rode no SQL Editor do seu Supabase para habilitar a troca de logo.</p>
+                  </div>
+                )}
+                <button 
+                  onClick={() => setShowSqlHelp(!showSqlHelp)}
+                  className="text-[8px] font-black uppercase text-indigo-600 hover:underline"
+                >
+                  {showSqlHelp ? 'Ocultar Ajuda SQL' : 'Mostrar Instruções SQL'}
+                </button>
               </div>
             </div>
           </div>
