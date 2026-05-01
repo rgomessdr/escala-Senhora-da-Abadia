@@ -53,30 +53,30 @@ enum OperationType {
 // Componente de logo com fallback automático
 const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => {
   const [hasError, setHasError] = useState(false);
-  
+  const logoUrl = useMemo(() => "/logo.png?v=" + Date.now(), []);
   const iconSize = Math.max(16, size / 2);
-  const logoUrl = "/logo.png";
 
   return (
     <div 
-      className={`flex items-center justify-center overflow-hidden shrink-0 ${className}`} 
+      className={`flex items-center justify-center overflow-hidden shrink-0 transition-all duration-300 ${className}`} 
       style={{ width: size, height: size }}
+      id="main-logo-container"
     >
-      {hasError ? (
-        <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-inner">
-          <Church size={iconSize} />
-        </div>
-      ) : (
+      {!hasError ? (
         <img 
           src={logoUrl} 
           alt="Logo Paróquia" 
           className="w-full h-full object-contain"
-          onError={() => {
-            console.error("Logo loading failed at " + logoUrl);
+          onError={(e) => {
+            console.warn(`[LogoDebug] Falha ao carregar logo: ${logoUrl}`);
             setHasError(true);
           }}
-          loading="eager"
         />
+      ) : (
+        <div className="w-full h-full bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl flex items-center justify-center text-white shadow-lg border border-white/20 relative group">
+          <Church size={iconSize} className="drop-shadow-sm group-hover:scale-110 transition-transform" />
+          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-indigo-400 rounded-full blur-[2px] opacity-50"></div>
+        </div>
       )}
     </div>
   );
