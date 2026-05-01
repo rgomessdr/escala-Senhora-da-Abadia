@@ -877,9 +877,9 @@ export default function App() {
         // Rule: No same person in same mass
         if (currentAcolitos.includes(server.id) || currentCoroinhas.includes(server.id)) return { allowed: false };
         
-        // Rule: Siblings MUST serve in the same mass
+        // Rule: Siblings MUST serve together in the same mass
         if (server.siblings && server.siblings.length > 0) {
-          // If any sibling is already assigned TODAY, they MUST be in THIS mass
+          // If any sibling is already assigned TODAY in another mass, this server cannot serve in this mass
           const siblingSomewhereElseToday = server.siblings.some(sid => 
             peopleAssignedOnDate[mass.date].has(sid) && 
             !currentAcolitos.includes(sid) && 
@@ -887,9 +887,11 @@ export default function App() {
           );
           if (siblingSomewhereElseToday) return { allowed: false };
 
-          // New logic: If this server is being picked, check if siblings SHOULD be here
-          // This is a soft check, the loop below will handle the actual "grouping" 
-          // by preferring siblings if one of them is already in the currentAssignments
+          // If a sibling is ALREADY in this mass, this is very allowed (prioritize them)
+          const siblingInThisMass = server.siblings.some(sid => 
+            currentAcolitos.includes(sid) || currentCoroinhas.includes(sid)
+          );
+          if (siblingInThisMass) return { allowed: true, isForced: true };
         }
 
         // Rule: No same person on the same day
@@ -984,9 +986,36 @@ export default function App() {
         
         if (available.length === 0) break;
         const res = available[0];
-        newAcolitos.push(res.s.id);
-        currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
-        peopleAssignedOnDate[mass.date].add(res.s.id);
+        
+        // Helper to assign a person and their siblings
+        const assignGroup = (person: Server) => {
+          if (peopleAssignedOnDate[mass.date].has(person.id)) return;
+          
+          if (person.type === 'acolito') {
+            if (!newAcolitos.includes(person.id)) newAcolitos.push(person.id);
+          } else {
+            if (!newCoroinhas.includes(person.id)) newCoroinhas.push(person.id);
+          }
+          currentStats[person.id] = (currentStats[person.id] || 0) + 1;
+          peopleAssignedOnDate[mass.date].add(person.id);
+
+          // Pull siblings
+          if (person.siblings) {
+            person.siblings.forEach(sid => {
+              if (peopleAssignedOnDate[mass.date].has(sid)) return;
+              const sib = servers.find(s => s.id === sid);
+              if (!sib) return;
+              
+              // Only pull if sibling is allowed (doesn't violate individual rules)
+              const sibCheck = tryAssign(sib, newAcolitos, newCoroinhas);
+              if (sibCheck.allowed) {
+                assignGroup(sib);
+              }
+            });
+          }
+        };
+
+        assignGroup(res.s);
       }
 
       // Fill Coroinhas
@@ -1010,9 +1039,35 @@ export default function App() {
         
         if (available.length === 0) break;
         const res = available[0];
-        newCoroinhas.push(res.s.id);
-        currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
-        peopleAssignedOnDate[mass.date].add(res.s.id);
+
+        // Use same group assignment helper
+        const assignGroup = (person: Server) => {
+          if (peopleAssignedOnDate[mass.date].has(person.id)) return;
+          
+          if (person.type === 'acolito') {
+            if (!newAcolitos.includes(person.id)) newAcolitos.push(person.id);
+          } else {
+            if (!newCoroinhas.includes(person.id)) newCoroinhas.push(person.id);
+          }
+          currentStats[person.id] = (currentStats[person.id] || 0) + 1;
+          peopleAssignedOnDate[mass.date].add(person.id);
+
+          // Pull siblings
+          if (person.siblings) {
+            person.siblings.forEach(sid => {
+              if (peopleAssignedOnDate[mass.date].has(sid)) return;
+              const sib = servers.find(s => s.id === sid);
+              if (!sib) return;
+              
+              const sibCheck = tryAssign(sib, newAcolitos, newCoroinhas);
+              if (sibCheck.allowed) {
+                assignGroup(sib);
+              }
+            });
+          }
+        };
+
+        assignGroup(res.s);
       }
 
       // Update local assignments for consecutive week check in this same run
