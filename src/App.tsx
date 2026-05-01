@@ -32,7 +32,9 @@ import {
   User as UserIcon,
   Lock,
   Shield,
-  Crown
+  Crown,
+  Globe,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
@@ -460,7 +462,7 @@ export default function App() {
       if (massesRes.error) throw massesRes.error;
       if (communitiesRes.error) throw communitiesRes.error;
 
-      setServers(serversRes.data.map(s => ({
+      setServers((serversRes.data || []).map(s => ({
         id: s.id,
         name: s.name,
         type: s.type,
@@ -472,17 +474,20 @@ export default function App() {
         ownerId: s.owner_id
       })));
 
-      setMasses(massesRes.data.map(m => ({
+      setMasses((massesRes.data || []).map(m => ({
         id: m.id,
         title: m.title,
         date: m.date,
         time: m.time,
         location: m.location,
-        assignments: m.assignments,
+        assignments: {
+          acolitos: m.assignments?.acolitos || [],
+          coroinhas: m.assignments?.coroinhas || []
+        },
         ownerId: m.owner_id
       })));
 
-      setCommunities(communitiesRes.data.map(c => ({
+      setCommunities((communitiesRes.data || []).map(c => ({
         id: c.id,
         name: c.name,
         ownerId: c.owner_id
@@ -2711,12 +2716,19 @@ function PublicView({ masses, servers }: { masses: Mass[], servers: Server[] }) 
 }
 
 function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin }: any) {
-  const [selectedMassId, setSelectedMassId] = useState<string | null>(masses[0]?.id || null);
+  const [selectedMassId, setSelectedMassId] = useState<string | null>(null);
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
   const [autoConfigs, setAutoConfigs] = useState<Record<string, { acolitos: number, coroinhas: number }>>({});
   const [selectedMassesForAuto, setSelectedMassesForAuto] = useState<Set<string>>(new Set());
   const [showPublicPanel, setShowPublicPanel] = useState(false);
   const publicUrl = `${window.location.origin}${window.location.pathname}?view=public`;
+
+  // Auto-select first mass when data arrives
+  useEffect(() => {
+    if (masses.length > 0 && !selectedMassId) {
+      setSelectedMassId(masses[0].id);
+    }
+  }, [masses, selectedMassId]);
 
   const copyPublicLink = () => {
     navigator.clipboard.writeText(publicUrl);
