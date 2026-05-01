@@ -2674,28 +2674,61 @@ function PublicView({ masses, servers }: { masses: Mass[], servers: Server[] }) 
             className="relative bg-indigo-600 rounded-3xl p-6 text-white overflow-hidden shadow-xl"
           >
             <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-            <div className="relative z-10 flex flex-col md:flex-row items-center gap-6">
-              <div className="w-20 h-20 bg-white/20 rounded-3xl flex flex-col items-center justify-center shrink-0 border border-white/20">
-                <span className="text-[10px] font-black uppercase text-indigo-200">HOJE</span>
-                <span className="text-3xl font-black">{featuredMass.date.split('-')[2]}</span>
-              </div>
-              <div className="text-center md:text-left flex-1">
-                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200 mb-1">Destaque do Dia</p>
-                <h2 className="text-xl font-black uppercase tracking-tight">{featuredMass.title}</h2>
-                <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 mt-2 text-xs font-bold text-indigo-100 uppercase tracking-widest">
-                  <span className="flex items-center gap-1"><Clock size={14} /> {featuredMass.time}</span>
-                  <span className="flex items-center gap-1"><MapPin size={14} /> {featuredMass.location}</span>
+            <div className="relative z-10 space-y-6">
+              <div className="flex flex-col md:flex-row items-center gap-6">
+                <div className="w-20 h-20 bg-white/20 rounded-3xl flex flex-col items-center justify-center shrink-0 border border-white/20">
+                  <span className="text-[10px] font-black uppercase text-indigo-200">HOJE</span>
+                  <span className="text-3xl font-black">{featuredMass.date.split('-')[2]}</span>
+                </div>
+                <div className="text-center md:text-left flex-1">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200 mb-1">Destaque do Dia</p>
+                  <h2 className="text-xl font-black uppercase tracking-tight">{featuredMass.title}</h2>
+                  <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 mt-2 text-xs font-bold text-indigo-100 uppercase tracking-widest">
+                    <span className="flex items-center gap-1"><Clock size={14} /> {featuredMass.time}</span>
+                    <span className="flex items-center gap-1"><MapPin size={14} /> {featuredMass.location}</span>
+                  </div>
+                </div>
+                <div className="bg-white/20 p-4 rounded-2xl flex items-center gap-4 border border-white/20 shrink-0">
+                  <div className="text-center">
+                    <p className="text-[8px] font-black text-indigo-100 uppercase mb-1">Acólitos</p>
+                    <p className="text-lg font-black">{featuredMass.assignments.acolitos.length}</p>
+                  </div>
+                  <div className="w-px h-8 bg-white/20" />
+                  <div className="text-center">
+                    <p className="text-[8px] font-black text-indigo-100 uppercase mb-1">Coroinhas</p>
+                    <p className="text-lg font-black">{featuredMass.assignments.coroinhas.length}</p>
+                  </div>
                 </div>
               </div>
-              <div className="bg-white/20 p-4 rounded-2xl flex items-center gap-4 border border-white/20">
-                <div className="text-center">
-                  <p className="text-[8px] font-black text-indigo-100 uppercase mb-1">Acólitos</p>
-                  <p className="text-lg font-black">{featuredMass.assignments.acolitos.length}</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t border-white/10">
+                <div className="space-y-3">
+                  <p className="text-[9px] font-black text-indigo-200 uppercase tracking-[0.2em]">Escalados Acólitos</p>
+                  <div className="flex flex-wrap gap-2">
+                    {featuredMass.assignments.acolitos.map(id => {
+                      const s = servers.find(sv => sv.id === id);
+                      return (
+                        <div key={id} className="px-3 py-2 bg-white/10 rounded-xl text-[10px] font-black border border-white/10 backdrop-blur-md">
+                          {s?.name || '...'}
+                        </div>
+                      )
+                    })}
+                    {featuredMass.assignments.acolitos.length === 0 && <p className="text-[10px] text-indigo-300/50 italic font-bold">Nenhum acólito escalado</p>}
+                  </div>
                 </div>
-                <div className="w-px h-8 bg-white/20" />
-                <div className="text-center">
-                  <p className="text-[8px] font-black text-indigo-100 uppercase mb-1">Coroinhas</p>
-                  <p className="text-lg font-black">{featuredMass.assignments.coroinhas.length}</p>
+                <div className="space-y-3">
+                  <p className="text-[9px] font-black text-indigo-200 uppercase tracking-[0.2em]">Escalados Coroinhas</p>
+                  <div className="flex flex-wrap gap-2">
+                    {featuredMass.assignments.coroinhas.map(id => {
+                      const s = servers.find(sv => sv.id === id);
+                      return (
+                        <div key={id} className="px-3 py-2 bg-white/10 rounded-xl text-[10px] font-black border border-white/10 backdrop-blur-md">
+                          {s?.name || '...'}
+                        </div>
+                      )
+                    })}
+                    {featuredMass.assignments.coroinhas.length === 0 && <p className="text-[10px] text-indigo-300/50 italic font-bold">Nenhum coroinha escalado</p>}
+                  </div>
                 </div>
               </div>
             </div>
