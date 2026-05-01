@@ -87,7 +87,8 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
     fetchLogo();
 
     // Inscrição Realtime para atualizar a logo instantaneamente em todos os lugares
-    const channel = supabase.channel('system_settings_changes')
+    const channelId = `logo_changes_${Math.random().toString(36).substring(7)}`;
+    const channel = supabase.channel(channelId)
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 
@@ -1334,26 +1335,30 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any)
                     <p className="text-[8px] text-rose-600 font-black uppercase mb-2">Ação Necessária no SQL Editor do Supabase:</p>
                     <div className="relative group">
                       <pre className="bg-slate-900 text-slate-100 p-2 rounded text-[7px] overflow-x-auto font-mono whitespace-pre-wrap">
-                        {`-- 1. Criar a tabela
+                        {`-- 1. Garante que a tabela existe
 CREATE TABLE IF NOT EXISTS public.system_settings (
   key TEXT PRIMARY KEY,
   value TEXT,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
--- 2. Habilitar RLS e Políticas
-ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+-- 2. Limpa políticas antigas para evitar erro de "already exists"
 DROP POLICY IF EXISTS "Public View" ON public.system_settings;
-CREATE POLICY "Public View" ON public.system_settings FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Public Mod" ON public.system_settings;
+DROP POLICY IF EXISTS "Config View" ON public.system_settings;
+DROP POLICY IF EXISTS "Config Mod" ON public.system_settings;
+
+-- 3. Habilita RLS e cria novas políticas
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public View" ON public.system_settings FOR SELECT USING (true);
 CREATE POLICY "Public Mod" ON public.system_settings FOR ALL USING (true);
 
--- 3. Habilitar Realtime (Opcional mas recomendado)
+-- 4. Habilita Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE system_settings;`}
                       </pre>
                     </div>
                     <p className="text-[8px] text-amber-600 mt-2 font-bold leading-tight">
-                      Copie o código acima, vá no painel do Supabase {'>'} SQL Editor {'>'} New Query e clique em RUN. Isso permitirá que o sistema salve sua logo personalizada.
+                      Copie este novo código atualizado acima para evitar o erro de "already exists". Cole no SQL Editor do Supabase e clique em RUN.
                     </p>
                   </div>
                 )}
