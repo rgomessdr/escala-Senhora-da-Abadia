@@ -862,8 +862,8 @@ export default function App() {
 
       // Targets based on rules or config override
       const config = configs ? configs[mass.id] : null;
-      const acolitosTarget = config ? config.acolitos : (isMatriz ? 3 : (isSunday ? 2 : 1));
-      const coroinhasTarget = config ? config.coroinhas : (isMatriz ? 4 : 2);
+      const acolitosTarget = config ? config.acolitos : 0;
+      const coroinhasTarget = config ? config.coroinhas : 0;
 
       let newAcolitos = []; // Clear current assignments for re-scheduling
       let newCoroinhas = []; // Clear current assignments for re-scheduling
@@ -3152,8 +3152,8 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
         const dateObj = new Date(m.date + 'T12:00:00');
         const isSunday = dateObj.getDay() === 0;
         initialConfigs[m.id] = { 
-          acolitos: isMatriz ? 3 : (isSunday ? 2 : 1), 
-          coroinhas: isMatriz ? 4 : 2 
+          acolitos: 0, 
+          coroinhas: 0 
         };
       });
       setAutoConfigs(initialConfigs);
@@ -3770,7 +3770,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                 <div className="space-y-3">
                    {masses.map((m: any) => {
                      const isSelected = selectedMassesForAuto.has(m.id);
-                     const config = autoConfigs[m.id] || { acolitos: 1, coroinhas: 2 };
+                     const config = autoConfigs[m.id] || { acolitos: 0, coroinhas: 0 };
                      return (
                        <div 
                          key={m.id} 
