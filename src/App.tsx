@@ -295,6 +295,15 @@ export default function App() {
   const userRoleValue = userRole || 'usuario';
   const isAdmin = isSuperAdmin || userRoleValue === 'admin';
 
+  const [isPublicView, setIsPublicView] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('view') === 'public') {
+      setIsPublicView(true);
+    }
+  }, []);
+
   // Set user role
   useEffect(() => {
     if (user?.email) {
@@ -438,7 +447,7 @@ export default function App() {
   };
 
   const fetchData = async () => {
-    if (!user) return;
+    if (!user && !isPublicView) return;
     
     try {
       const [serversRes, massesRes, communitiesRes] = await Promise.all([
@@ -492,7 +501,7 @@ export default function App() {
     fetchAuthorizedEmails();
     
     // Set up real-time subscriptions
-    if (!user) return;
+    if (!user && !isPublicView) return;
 
     const serversSub = supabase.channel('servers-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'servers' }, () => fetchData())
@@ -506,7 +515,7 @@ export default function App() {
       serversSub.unsubscribe();
       massesSub.unsubscribe();
     };
-  }, [user]);
+  }, [user, isPublicView]);
 
   // Statistics
   const serverStats = useMemo(() => {
@@ -671,6 +680,39 @@ export default function App() {
     const category = role === 'acolito' ? 'acolitos' : 'coroinhas';
     const exists = mass.assignments[category].includes(serverId);
 
+    // If we are adding, check rules
+    if (!exists) {
+      // 1. Rule: No same person on the same day
+      const alreadyOnSameDay = masses.find(m => 
+        m.id !== massId && 
+        m.date === mass.date && 
+        (m.assignments.acolitos.includes(serverId) || m.assignments.coroinhas.includes(serverId))
+      );
+
+      if (alreadyOnSameDay) {
+        alert(`${server.name} já está escalado(a) nesta data (${mass.date}) na missa de ${alreadyOnSameDay.time} em ${alreadyOnSameDay.location}.`);
+        return;
+      }
+
+      // 2. Rule: Alternating week (No same person in same slot in consecutive weeks)
+      const dateObj = new Date(mass.date + 'T00:00:00');
+      const sevenDaysAgo = new Date(dateObj);
+      sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+      const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+      const assignedLastWeek = masses.find(m => 
+        m.date === sevenDaysAgoStr && 
+        m.time === mass.time && 
+        m.location === mass.location &&
+        (m.assignments.acolitos.includes(serverId) || m.assignments.coroinhas.includes(serverId))
+      );
+
+      if (assignedLastWeek) {
+        alert(`${server.name} foi escalado(a) no mesmo horário e local na semana anterior. A regra de alternância exige que descanse esta semana.`);
+        return;
+      }
+    }
+
     const updatedList = exists 
       ? mass.assignments[category].filter(id => id !== serverId)
       : [...mass.assignments[category], serverId];
@@ -707,6 +749,21 @@ export default function App() {
 
     const currentStats = { ...serverStats };
     const peopleAssignedOnDate: Record<string, Set<string>> = {}; // date -> set of serverIds
+    
+    // Pre-populate with existing manual assignments to respect "same day" rule correctly
+    masses.forEach(m => {
+      if (!peopleAssignedOnDate[m.date]) peopleAssignedOnDate[m.date] = new Set();
+      m.assignments.acolitos.forEach(id => peopleAssignedOnDate[m.date].add(id));
+      m.assignments.coroinhas.forEach(id => peopleAssignedOnDate[m.date].add(id));
+    });
+
+    const localAssignments: Record<string, { acolitos: string[], coroinhas: string[] }> = {};
+    masses.forEach(m => {
+      localAssignments[m.id] = { 
+        acolitos: [...m.assignments.acolitos], 
+        coroinhas: [...m.assignments.coroinhas] 
+      };
+    });
 
     for (const mass of sortedMasses) {
       if (!peopleAssignedOnDate[mass.date]) peopleAssignedOnDate[mass.date] = new Set();
@@ -725,9 +782,29 @@ export default function App() {
       let newAcolitos = [...mass.assignments.acolitos];
       let newCoroinhas = [...mass.assignments.coroinhas];
 
+      // Rule: Alternating Week (same time and location)
+      const sevenDaysAgo = new Date(dateObj);
+      sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+      const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
       const tryAssign = (server: Server, currentAcolitos: string[], currentCoroinhas: string[]) => {
+        // Rule: No same person in same mass
         if (currentAcolitos.includes(server.id) || currentCoroinhas.includes(server.id)) return { allowed: false };
+        
+        // Rule: No same person on the same day
         if (peopleAssignedOnDate[mass.date].has(server.id)) return { allowed: false };
+
+        // Rule: Alternating week (7 days ago in same slot)
+        const lastWeekSameSlot = masses.some(m => {
+          const isSameSlot = m.date === sevenDaysAgoStr && m.time === mass.time && m.location === mass.location;
+          if (!isSameSlot) return false;
+          
+          // Check both original and current loop assignments
+          const currentAssigns = localAssignments[m.id] || m.assignments;
+          return currentAssigns.acolitos.includes(server.id) || currentAssigns.coroinhas.includes(server.id);
+        });
+
+        if (lastWeekSameSlot) return { allowed: false };
 
         const n = server.name;
         const loc = mass.location.toLowerCase();
@@ -826,6 +903,12 @@ export default function App() {
         });
       }
 
+      // Update local assignments for consecutive week check in this same run
+      localAssignments[mass.id] = {
+        acolitos: newAcolitos,
+        coroinhas: newCoroinhas
+      };
+
       try {
         const { error } = await sdb.masses.update(mass.id, {
           assignments: {
@@ -867,7 +950,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!user && !isPublicView) {
     return (
       <AuthView 
         onEmailLogin={handleEmailLogin}
@@ -877,6 +960,10 @@ export default function App() {
         connStatus={connStatus}
       />
     );
+  }
+
+  if (isPublicView) {
+    return <PublicView masses={masses} servers={servers} />;
   }
 
 
@@ -2529,11 +2616,112 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
   );
 }
 
+function PublicView({ masses, servers }: { masses: Mass[], servers: Server[] }) {
+  // Filtrar apenas missas futuras ou recentes
+  const sortedMasses = [...masses].sort((a, b) => {
+    const dateDiff = a.date.localeCompare(b.date);
+    return dateDiff !== 0 ? dateDiff : a.time.localeCompare(b.time);
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
+      <div className="max-w-4xl mx-auto space-y-8">
+        <header className="text-center space-y-4">
+          <div className="flex justify-center">
+            <LogoImage size={80} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-display font-black text-slate-900 tracking-tight uppercase">Escalas de Coroinhas & Acólitos</h1>
+            <p className="text-slate-500 font-bold uppercase tracking-[0.2em] text-[10px] mt-1">Paróquia Nossa Senhora da Abadia • Sidrolândia</p>
+          </div>
+          <div className="h-1 w-20 bg-indigo-600 mx-auto rounded-full" />
+        </header>
+
+        <div className="space-y-6">
+          {sortedMasses.length === 0 ? (
+            <div className="p-12 text-center glass-card border-dashed">
+              <p className="font-bold text-slate-400">Nenhuma escala publicada no momento.</p>
+            </div>
+          ) : (
+            sortedMasses.map(m => (
+              <div key={m.id} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-slate-900 rounded-2xl flex flex-col items-center justify-center text-white shrink-0">
+                      <span className="text-[9px] font-black uppercase text-indigo-400 mb-0.5">{new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short' })}</span>
+                      <span className="text-xl font-black leading-none">{m.date.split('-')[2]}</span>
+                    </div>
+                    <div>
+                      <h3 className="font-black text-slate-900 uppercase text-sm tracking-tight">{m.title}</h3>
+                      <div className="flex items-center gap-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                        <span className="flex items-center gap-1"><Clock size={12} /> {m.time}</span>
+                        <span className="flex items-center gap-1"><MapPin size={12} /> {m.location}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8 bg-slate-50/30">
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-2">
+                       <span className="w-2 h-2 bg-indigo-600 rounded-full" /> Acólitos
+                    </h4>
+                    <div className="space-y-2">
+                      {m.assignments.acolitos.length > 0 ? m.assignments.acolitos.map(id => {
+                        const s = servers.find(sv => sv.id === id);
+                        return (
+                          <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
+                            <div className="w-6 h-6 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 text-[10px]">{s?.name?.[0]}</div>
+                            {s?.name || 'Membro não encontrado'}
+                          </div>
+                        );
+                      }) : <p className="text-[10px] text-slate-400 italic">Nenhum acólito escalado</p>}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                       <span className="w-2 h-2 bg-blue-600 rounded-full" /> Coroinhas
+                    </h4>
+                    <div className="space-y-2">
+                      {m.assignments.coroinhas.length > 0 ? m.assignments.coroinhas.map(id => {
+                        const s = servers.find(sv => sv.id === id);
+                        return (
+                          <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
+                            <div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 text-[10px]">{s?.name?.[0]}</div>
+                            {s?.name || 'Membro não encontrado'}
+                          </div>
+                        );
+                      }) : <p className="text-[10px] text-slate-400 italic">Nenhum coroinha escalado</p>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <footer className="pt-8 pb-12 border-t border-slate-200 text-center space-y-2">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Paróquia Nossa Senhora da Abadia</p>
+          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(masses[0]?.id || null);
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
   const [autoConfigs, setAutoConfigs] = useState<Record<string, { acolitos: number, coroinhas: number }>>({});
   const [selectedMassesForAuto, setSelectedMassesForAuto] = useState<Set<string>>(new Set());
+  const [showPublicPanel, setShowPublicPanel] = useState(false);
+  const publicUrl = `${window.location.origin}${window.location.pathname}?view=public`;
+
+  const copyPublicLink = () => {
+    navigator.clipboard.writeText(publicUrl);
+    alert("Link público copiado! Agora você pode enviar no WhatsApp.");
+  };
 
   // Initialize configs if empty and select all by default when opening
   useEffect(() => {
@@ -2621,6 +2809,12 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
           {isAdmin && (
             <>
               <button 
+                onClick={() => setShowPublicPanel(!showPublicPanel)}
+                className="flex items-center gap-2 px-5 py-3 bg-white border border-indigo-200 text-indigo-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-50 transition-all"
+              >
+                 <Globe size={16} /> Publicar
+              </button>
+              <button 
                 onClick={clearSchedule}
                 className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all"
               >
@@ -2648,6 +2842,27 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
           </button>
         </div>
       </header>
+
+      {showPublicPanel && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-indigo-900 text-white rounded-3xl p-6 shadow-2xl relative overflow-hidden shrink-0"
+        >
+          <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
+            <div className="space-y-1 text-center md:text-left">
+              <h3 className="text-xl font-black uppercase tracking-tight">Escala Online</h3>
+              <p className="text-xs text-indigo-200 font-bold">Use este link para que os membros acompanhem as escalas sem precisar logar.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 bg-white/10 p-2 rounded-2xl">
+              <code className="bg-black/20 p-3 rounded-xl text-[10px] font-mono text-indigo-300 max-w-[200px] truncate">{publicUrl}</code>
+              <button onClick={copyPublicLink} className="px-4 py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-indigo-600 transition-all">Copiar Link</button>
+              <button onClick={() => window.open(publicUrl, '_blank')} className="p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-all border border-white/10 shadow-lg"><ExternalLink size={18} /></button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {masses.length === 0 ? (
          <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
