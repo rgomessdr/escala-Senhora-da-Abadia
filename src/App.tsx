@@ -55,7 +55,7 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
   const [hasError, setHasError] = useState(false);
   
   const iconSize = Math.max(16, size / 2);
-  const logoUrl = useMemo(() => `/logo-paroquia.png?v=${Date.now()}`, []);
+  const logoUrl = useMemo(() => `/logo.png?v=${Date.now()}`, []);
 
   return (
     <div 
@@ -72,7 +72,7 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
           alt="Logo Paróquia" 
           className="w-full h-full object-contain"
           onError={() => {
-            console.error("Logo loading failed at /logo-paroquia.png");
+            console.error("Logo loading failed at /logo.png");
             setHasError(true);
           }}
           loading="eager"
