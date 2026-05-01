@@ -56,61 +56,57 @@ const APP_LOGO_URL = "/logotipo-principal.png";
 // Componente de logo - Tenta carregar do banco de dados ou da pasta public
 const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => {
   const [hasError, setHasError] = useState(false);
-  const [customLogo, setCustomLogo] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string>(APP_LOGO_URL);
   
   useEffect(() => {
+    let isMounted = true;
     const fetchLogo = async () => {
       try {
+        // Verificamos se o supabase está configurado antes de tentar buscar
+        if (!supabase) return;
+        
         const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'app_logo').single();
-        if (!error && data && data.value) {
-          setCustomLogo(data.value);
+        if (isMounted && !error && data && data.value) {
+          setLogoUrl(data.value);
         }
       } catch (err) {
-        console.error("Error fetching custom logo:", err);
+        console.warn("Could not fetch custom logo, using default:", err);
       }
     };
     fetchLogo();
-    
-    // Subscribe to changes
-    const channel = supabase.channel('logo-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings', filter: 'key=eq.app_logo' }, (payload: any) => {
-        if (payload.new && payload.new.value) {
-          setCustomLogo(payload.new.value);
-          setHasError(false); // Reset error when logo changes
-        }
-      })
-      .subscribe();
-      
-    return () => {
-      channel.unsubscribe();
-    };
+    return () => { isMounted = false; };
   }, []);
 
-  const logoUrl = customLogo || `${APP_LOGO_URL}?v=${Date.now()}`;
   const iconSize = Math.max(16, size / 2);
+
+  if (hasError) {
+    return (
+      <div 
+        className={`bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md border border-white/20 ${className}`} 
+        style={{ width: size, height: size }}
+      >
+        <Church size={iconSize} />
+      </div>
+    );
+  }
 
   return (
     <div 
       className={`flex items-center justify-center overflow-hidden shrink-0 ${className}`} 
       style={{ width: size, height: size }}
-      id="main-logo-container"
     >
-      {!hasError ? (
-        <img 
-          src={logoUrl} 
-          key={logoUrl}
-          alt="Logo Paróquia" 
-          className="w-full h-full object-contain"
-          onError={(e) => {
-            console.warn("LOGO NOT FOUND OR INVALID:", logoUrl);
+      <img 
+        src={logoUrl} 
+        alt="Logo" 
+        className="w-full h-full object-contain"
+        onError={() => {
+          if (logoUrl !== APP_LOGO_URL) {
+            setLogoUrl(APP_LOGO_URL);
+          } else {
             setHasError(true);
-          }}
-        />
-      ) : (
-        <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md border border-white/20">
-          <Church size={iconSize} />
-        </div>
-      )}
+          }
+        }}
+      />
     </div>
   );
 };
