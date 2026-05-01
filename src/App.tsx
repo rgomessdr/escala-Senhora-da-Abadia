@@ -34,7 +34,10 @@ import {
   Shield,
   Crown,
   Globe,
-  ExternalLink
+  ExternalLink,
+  Bell,
+  Megaphone,
+  Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, db as sdb, checkSupabaseConnection } from './lib/supabase';
@@ -223,10 +226,20 @@ CREATE TABLE IF NOT EXISTS masses (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- TABELA DE AVISOS/COMUNICADOS
+CREATE TABLE IF NOT EXISTS notices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content TEXT NOT NULL,
+  active BOOLEAN DEFAULT TRUE,
+  owner_id UUID DEFAULT auth.uid(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- SEGURANÇA (RLS)
 ALTER TABLE servers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE communities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE masses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notices ENABLE ROW LEVEL SECURITY;
 
 -- POLÍTICAS DE ACESSO (Usando IF NOT EXISTS ou drop/create)
 DROP POLICY IF EXISTS "Acesso Total Servidores" ON servers;
@@ -237,6 +250,11 @@ CREATE POLICY "Acesso Total Comunidades" ON communities FOR ALL USING (true) WIT
 
 DROP POLICY IF EXISTS "Acesso Total Missas" ON masses;
 CREATE POLICY "Acesso Total Missas" ON masses FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Qualquer um vê avisos" ON notices;
+CREATE POLICY "Qualquer um vê avisos" ON notices FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Acesso Total Avisos" ON notices;
+CREATE POLICY "Acesso Total Avisos" ON notices FOR ALL USING (true) WITH CHECK (true);
 
 -- GERENCIAMENTO DE USUÁRIOS
 CREATE TABLE IF NOT EXISTS admin_users (
@@ -283,6 +301,7 @@ export default function App() {
   const [view, setView] = useState<View>('dashboard');
   const [servers, setServers] = useState<Server[]>([]);
   const [masses, setMasses] = useState<Mass[]>([]);
+  const [notices, setNotices] = useState<{id: string, content: string, ownerId: string}[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -452,10 +471,11 @@ export default function App() {
     if (!user && !isPublicView) return;
     
     try {
-      const [serversRes, massesRes, communitiesRes] = await Promise.all([
+      const [serversRes, massesRes, communitiesRes, noticesRes] = await Promise.all([
         sdb.servers.list(),
         sdb.masses.list(),
-        sdb.communities.list()
+        sdb.communities.list(),
+        sdb.notices.list()
       ]);
 
       if (serversRes.error) throw serversRes.error;
@@ -492,6 +512,12 @@ export default function App() {
         name: c.name,
         ownerId: c.owner_id
       })));
+
+      setNotices((noticesRes.data || []).map(n => ({
+        id: n.id,
+        content: n.content,
+        ownerId: n.owner_id
+      })));
     } catch (err: any) {
       console.error("Error fetching data:", err);
       // Tratar erro de permissão (RLS)
@@ -516,9 +542,14 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'masses' }, () => fetchData())
       .subscribe();
 
+    const noticesSub = supabase.channel('notices-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notices' }, () => fetchData())
+      .subscribe();
+
     return () => {
       serversSub.unsubscribe();
       massesSub.unsubscribe();
+      noticesSub.unsubscribe();
     };
   }, [user, isPublicView]);
 
@@ -601,6 +632,39 @@ export default function App() {
       fetchData();
     } catch (err) {
       handleSupabaseError(err, OperationType.DELETE, 'Servidor');
+    }
+  };
+
+  const addNotice = async (content: string) => {
+    if (!user) return;
+    try {
+      const { error } = await sdb.notices.insert(content, user.id);
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.CREATE, 'avisos');
+    }
+  };
+
+  const updateNotice = async (id: string, content: string) => {
+    if (!user) return;
+    try {
+      const { error } = await sdb.notices.update(id, content);
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.UPDATE, 'avisos');
+    }
+  };
+
+  const removeNotice = async (id: string) => {
+    if (!window.confirm("Deseja realmente excluir este aviso?")) return;
+    try {
+      const { error } = await sdb.notices.delete(id);
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      handleSupabaseError(err, OperationType.DELETE, 'avisos');
     }
   };
 
@@ -977,7 +1041,7 @@ export default function App() {
   }
 
   if (isPublicView) {
-    return <PublicView masses={masses} servers={servers} />;
+    return <PublicView masses={masses} servers={servers} notices={notices} />;
   }
 
 
@@ -1233,6 +1297,10 @@ export default function App() {
                 autoSchedule={autoSchedule} 
                 clearSchedule={clearSchedule} 
                 isAdmin={isAdmin}
+                notices={notices}
+                addNotice={addNotice}
+                updateNotice={updateNotice}
+                removeNotice={removeNotice}
               />
             )}
           </motion.div>
@@ -2630,7 +2698,7 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
   );
 }
 
-function PublicView({ masses, servers }: { masses: Mass[], servers: Server[] }) {
+function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Server[], notices: any[] }) {
   const [searchTerm, setSearchTerm] = useState('');
   
   // Filtrar missas futuras ou recentes
@@ -2666,6 +2734,38 @@ function PublicView({ masses, servers }: { masses: Mass[], servers: Server[] }) 
           </div>
           <div className="h-1 w-20 bg-indigo-600 mx-auto rounded-full" />
         </header>
+
+        {/* Central de Comunicados / Avisos */}
+        {notices && notices.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-indigo-600 rounded-3xl p-8 shadow-2xl relative overflow-hidden text-white border-4 border-indigo-500"
+          >
+            <div className="absolute right-0 top-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+            
+            <div className="relative z-10 space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
+                  <Megaphone size={20} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-widest leading-none">Comunicados Importantes</h3>
+                  <p className="text-[9px] font-bold text-indigo-200 uppercase tracking-tighter mt-1">Coordenação de Altar</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {notices.map((n, i) => (
+                  <div key={n.id} className="flex gap-4 p-4 bg-white/10 rounded-2xl border border-white/10">
+                    <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-[10px] font-black shrink-0 border border-white/20">{i + 1}</div>
+                    <p className="text-sm sm:text-base font-bold leading-relaxed">{n.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {featuredMass && searchTerm === '' && (
           <motion.div 
@@ -2819,13 +2919,17 @@ function PublicView({ masses, servers }: { masses: Mass[], servers: Server[] }) 
   );
 }
 
-function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin }: any) {
+function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin, notices, addNotice, updateNotice, removeNotice }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(null);
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
   const [autoConfigs, setAutoConfigs] = useState<Record<string, { acolitos: number, coroinhas: number }>>({});
   const [selectedMassesForAuto, setSelectedMassesForAuto] = useState<Set<string>>(new Set());
   const [showPublicPanel, setShowPublicPanel] = useState(false);
+  const [isNotifying, setIsNotifying] = useState(false);
+  const [noticeContent, setNoticeContent] = useState('');
+  const [showNoticeManager, setShowNoticeManager] = useState(false);
+
   const publicUrl = `${window.location.origin}${window.location.pathname}?view=public`;
 
   const uniqueLocations = useMemo(() => {
@@ -2925,6 +3029,23 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
     window.open(url, '_blank');
   };
 
+  const handlePublish = () => {
+    setIsNotifying(true);
+    // Simulating a publish action that ensures everything is synced
+    // Since it's realtime, it's already sync, but we provide feedback
+    setTimeout(() => {
+      setIsNotifying(false);
+      setShowPublicPanel(true);
+    }, 800);
+  };
+
+  const handleAddNotice = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noticeContent.trim()) return;
+    addNotice(noticeContent);
+    setNoticeContent('');
+  };
+
   return (
     <div className="space-y-8 flex-1 flex flex-col h-full overflow-hidden">
       <header className="flex h-fit flex-col md:flex-row md:items-end justify-between gap-6 shrink-0">
@@ -2935,14 +3056,26 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
             <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight">Montagem de Escala</h1>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {isAdmin && (
             <>
               <button 
-                onClick={() => setShowPublicPanel(!showPublicPanel)}
-                className="flex items-center gap-2 px-5 py-3 bg-white border border-indigo-200 text-indigo-700 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-50 transition-all"
+                onClick={() => setShowNoticeManager(!showNoticeManager)}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all border ${
+                  showNoticeManager ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50'
+                }`}
               >
-                 <Globe size={16} /> Publicar
+                 <Megaphone size={16} /> Avisos
+              </button>
+              <button 
+                onClick={handlePublish}
+                disabled={isNotifying}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all border ${
+                  isNotifying ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50'
+                }`}
+              >
+                 {isNotifying ? <CheckCircle2 size={16} /> : <Globe size={16} />}
+                 {isNotifying ? 'Publicado!' : 'Publicar'}
               </button>
               <button 
                 onClick={clearSchedule}
@@ -2972,6 +3105,62 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
           </button>
         </div>
       </header>
+
+      {showNoticeManager && (
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="bg-indigo-50 border border-indigo-100 rounded-3xl overflow-hidden shadow-inner shrink-0"
+        >
+          <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-indigo-700 flex items-center gap-2">
+                <Megaphone size={14} /> Central de Comunicados
+              </h3>
+              <p className="text-[10px] text-indigo-400 font-bold uppercase">{notices.length} Avisos Ativos</p>
+            </div>
+            
+            {isAdmin && (
+              <form onSubmit={handleAddNotice} className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={noticeContent}
+                  onChange={e => setNoticeContent(e.target.value)}
+                  placeholder="DIGITE UM NOVO COMUNICADO..."
+                  className="flex-1 p-4 bg-white border border-indigo-100 rounded-2xl text-xs font-bold uppercase tracking-wider outline-none focus:ring-4 focus:ring-indigo-200/50"
+                />
+                <button type="submit" className="px-6 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2">
+                  <Plus size={16} /> Postar
+                </button>
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+              {notices.map((n: any) => (
+                <div key={n.id} className="group bg-white p-4 rounded-2xl border border-indigo-100 flex items-start justify-between gap-4 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                    <p className="text-[11px] font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.content}</p>
+                  </div>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => removeNotice(n.id)}
+                      className="p-1 text-slate-200 hover:text-rose-500 transition-colors shrink-0"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {notices.length === 0 && (
+                <div className="col-span-full py-6 text-center text-[10px] font-bold text-indigo-300 uppercase tracking-widest italic">
+                  Nenhum comunicado ativo no momento.
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {showPublicPanel && (
         <motion.div 

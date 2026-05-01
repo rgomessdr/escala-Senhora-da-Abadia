@@ -127,5 +127,11 @@ export const db = {
       return supabase.from('masses').update(payload).eq('id', id);
     },
     delete: (id: string) => supabase.from('masses').delete().eq('id', id),
+  },
+  notices: {
+    list: () => supabase.from('notices').select('*').order('created_at', { ascending: false }),
+    insert: (content: string, ownerId: string) => supabase.from('notices').insert({ content, owner_id: ownerId }).select(),
+    update: (id: string, content: string) => supabase.from('notices').update({ content }).eq('id', id),
+    delete: (id: string) => supabase.from('notices').delete().eq('id', id),
   }
 };
