@@ -9,5 +9,5 @@ This is a management system for Altar Servers (Acólitos & Coroinhas) for the Ab
 ## Tech Stack
 - React + Vite
 - Tailwind CSS
-- Firebase (Auth + Firestore)
+- Supabase (Auth + Database + Realtime)
 - motion (for animations)
