@@ -887,7 +887,7 @@ export default function App() {
           );
           if (siblingSomewhereElseToday) return { allowed: false };
 
-          // If a sibling is ALREADY in this mass, this is very allowed (prioritize them)
+          // If a sibling is ALREADY in this mass, this is very allowed (force them to join)
           const siblingInThisMass = server.siblings.some(sid => 
             currentAcolitos.includes(sid) || currentCoroinhas.includes(sid)
           );
@@ -959,115 +959,75 @@ export default function App() {
         return { allowed: true, isForced };
       };
 
+      // Helper to assign a person and their siblings atomically across both roles
+      const assignGroup = (person: Server) => {
+        // Collect all siblings who aren't already assigned today
+        const group = [person];
+        if (person.siblings) {
+          person.siblings.forEach(sid => {
+            const sib = servers.find(s => s.id === sid);
+            // Only add if not already assigned to THIS or ANY OTHER mass today
+            if (sib && !peopleAssignedOnDate[mass.date].has(sib.id)) {
+              group.push(sib);
+            }
+          });
+        }
+
+        group.forEach(p => {
+          if (p.type === 'acolito') {
+            if (!newAcolitos.includes(p.id)) newAcolitos.push(p.id);
+          } else {
+            if (!newCoroinhas.includes(p.id)) newCoroinhas.push(p.id);
+          }
+          currentStats[p.id] = (currentStats[p.id] || 0) + 1;
+          peopleAssignedOnDate[mass.date].add(p.id);
+        });
+      };
+
       // Fill Acolitos
       while (newAcolitos.length < acolitosTarget) {
         const available = servers
-          .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas) }))
+          .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas), random: Math.random() }))
           .filter(res => res.allowed)
           .sort((a, b) => {
             if (a.isForced && !b.isForced) return -1;
             if (!a.isForced && b.isForced) return 1;
             
-            // Siblings priority: If a sibling is already in this mass, prioritize this candidate
-            const hasSiblingInMassA = a.s.siblings && a.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
-            const hasSiblingInMassB = b.s.siblings && b.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
-            
-            if (hasSiblingInMassA && !hasSiblingInMassB) return -1;
-            if (!hasSiblingInMassA && hasSiblingInMassB) return 1;
-
             let scoreA = currentStats[a.s.id] || 0;
             let scoreB = currentStats[b.s.id] || 0;
-            if ((a.s.name.includes("Ana Gabrielly") || a.s.name.includes("Lucas Andreetta") || a.s.name.includes("Pedro Lucas")) && dayOfWeek === 2) scoreA += 5;
-            if ((b.s.name.includes("Ana Gabrielly") || b.s.name.includes("Lucas Andreetta") || b.s.name.includes("Pedro Lucas")) && dayOfWeek === 2) scoreB += 5;
-            if (a.s.name.includes("Daniel Queiroz") && dayOfWeek === 3) scoreA += 5;
-            if (b.s.name.includes("Daniel Queiroz") && dayOfWeek === 3) scoreB += 5;
-            return scoreA - scoreB;
+            
+            // Priority names for specific days
+            if ((a.s.name.includes("Ana Gabrielly") || a.s.name.includes("Lucas Andreetta") || a.s.name.includes("Pedro Lucas")) && dayOfWeek === 2) scoreA -= 10;
+            if ((b.s.name.includes("Ana Gabrielly") || b.s.name.includes("Lucas Andreetta") || b.s.name.includes("Pedro Lucas")) && dayOfWeek === 2) scoreB -= 10;
+            if (a.s.name.includes("Daniel Queiroz") && dayOfWeek === 3) scoreA -= 10;
+            if (b.s.name.includes("Daniel Queiroz") && dayOfWeek === 3) scoreB -= 10;
+            
+            if (scoreA !== scoreB) return scoreA - scoreB;
+            return a.random - b.random; // Random tie-breaker
           });
         
         if (available.length === 0) break;
-        const res = available[0];
-        
-        // Helper to assign a person and their siblings
-        const assignGroup = (person: Server) => {
-          if (peopleAssignedOnDate[mass.date].has(person.id)) return;
-          
-          if (person.type === 'acolito') {
-            if (!newAcolitos.includes(person.id)) newAcolitos.push(person.id);
-          } else {
-            if (!newCoroinhas.includes(person.id)) newCoroinhas.push(person.id);
-          }
-          currentStats[person.id] = (currentStats[person.id] || 0) + 1;
-          peopleAssignedOnDate[mass.date].add(person.id);
-
-          // Pull siblings
-          if (person.siblings) {
-            person.siblings.forEach(sid => {
-              if (peopleAssignedOnDate[mass.date].has(sid)) return;
-              const sib = servers.find(s => s.id === sid);
-              if (!sib) return;
-              
-              // Only pull if sibling is allowed (doesn't violate individual rules)
-              const sibCheck = tryAssign(sib, newAcolitos, newCoroinhas);
-              if (sibCheck.allowed) {
-                assignGroup(sib);
-              }
-            });
-          }
-        };
-
-        assignGroup(res.s);
+        assignGroup(available[0].s);
       }
 
       // Fill Coroinhas
       while (newCoroinhas.length < coroinhasTarget) {
         const available = servers
-          .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas) }))
+          .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas), random: Math.random() }))
           .filter(res => res.allowed)
           .sort((a, b) => {
             if (a.isForced && !b.isForced) return -1;
             if (!a.isForced && b.isForced) return 1;
 
-            // Siblings priority: If a sibling is already in this mass, prioritize this candidate
-            const hasSiblingInMassA = a.s.siblings && a.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
-            const hasSiblingInMassB = b.s.siblings && b.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
+            let scoreA = currentStats[a.s.id] || 0;
+            let scoreB = currentStats[b.s.id] || 0;
             
-            if (hasSiblingInMassA && !hasSiblingInMassB) return -1;
-            if (!hasSiblingInMassA && hasSiblingInMassB) return 1;
-
-            return (currentStats[a.s.id] || 0) - (currentStats[b.s.id] || 0);
+            if (scoreA !== scoreB) return scoreA - scoreB;
+            return a.random - b.random; // Random tie-breaker
           });
         
         if (available.length === 0) break;
-        const res = available[0];
-
-        // Use same group assignment helper
-        const assignGroup = (person: Server) => {
-          if (peopleAssignedOnDate[mass.date].has(person.id)) return;
-          
-          if (person.type === 'acolito') {
-            if (!newAcolitos.includes(person.id)) newAcolitos.push(person.id);
-          } else {
-            if (!newCoroinhas.includes(person.id)) newCoroinhas.push(person.id);
-          }
-          currentStats[person.id] = (currentStats[person.id] || 0) + 1;
-          peopleAssignedOnDate[mass.date].add(person.id);
-
-          // Pull siblings
-          if (person.siblings) {
-            person.siblings.forEach(sid => {
-              if (peopleAssignedOnDate[mass.date].has(sid)) return;
-              const sib = servers.find(s => s.id === sid);
-              if (!sib) return;
-              
-              const sibCheck = tryAssign(sib, newAcolitos, newCoroinhas);
-              if (sibCheck.allowed) {
-                assignGroup(sib);
-              }
-            });
-          }
-        };
-
-        assignGroup(res.s);
+        assignGroup(available[0].s);
       }
 
       // Update local assignments for consecutive week check in this same run
