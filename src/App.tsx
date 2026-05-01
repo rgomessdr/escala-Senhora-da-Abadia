@@ -50,40 +50,30 @@ enum OperationType {
   WRITE = 'write',
 }
 
-// URL da Logo Principal - Tentamos primeiro a do repositório para garantir que funcione se o arquivo local estiver corrompido ou vazio
-const GITHUB_LOGO_URL = "https://raw.githubusercontent.com/rgomessdr/escala-Senhora-da-Abadia/main/public/logotipo-principal.png";
-const LOCAL_LOGO_URL = "/logotipo-principal.png";
+// URL da Logo Principal
+const APP_LOGO_URL = "/logotipo-principal.png";
 
-// Componente de logo - Tenta carregar do GitHub primeiro, depois local, depois ícone
+// Componente de logo - Tenta carregar o arquivo da pasta public
 const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => {
-  const [src, setSrc] = useState(`${GITHUB_LOGO_URL}?v=${Date.now()}`);
-  const [useFallbackIcon, setUseFallbackIcon] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const logoUrl = `${APP_LOGO_URL}?v=${Date.now()}`; // Força atualização do cache
   const iconSize = Math.max(16, size / 2);
-
-  const handleError = () => {
-    // Se a URL atual for a do GitHub, tenta a local
-    if (src.includes("raw.githubusercontent.com")) {
-      console.log("Falha ao carregar logo do GitHub, tentando local...");
-      setSrc(`${LOCAL_LOGO_URL}?v=${Date.now()}`);
-    } 
-    // Se a URL atual for a local, usa o ícone de backup
-    else if (src.includes(LOCAL_LOGO_URL)) {
-      console.log("Falha ao carregar logo local, usando ícone.");
-      setUseFallbackIcon(true);
-    }
-  };
 
   return (
     <div 
       className={`flex items-center justify-center overflow-hidden shrink-0 ${className}`} 
       style={{ width: size, height: size }}
+      id="main-logo-container"
     >
-      {!useFallbackIcon ? (
+      {!hasError ? (
         <img 
-          src={src} 
+          src={logoUrl} 
           alt="Logo Paróquia" 
           className="w-full h-full object-contain"
-          onError={handleError}
+          onError={(e) => {
+            console.error("ERRO CRÍTICO NA LOGO: O arquivo /public/logotipo-principal.png não é uma imagem vailda ou está vazio.");
+            setHasError(true);
+          }}
         />
       ) : (
         <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md border border-white/20">
