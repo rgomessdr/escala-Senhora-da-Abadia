@@ -130,8 +130,20 @@ export const db = {
   },
   notices: {
     list: () => supabase.from('notices').select('*').order('created_at', { ascending: false }),
-    insert: (content: string, ownerId: string) => supabase.from('notices').insert({ content, owner_id: ownerId }).select(),
-    update: (id: string, content: string) => supabase.from('notices').update({ content }).eq('id', id),
+    insert: (data: { content: string, startDate?: string, endDate?: string, ownerId: string }) => 
+      supabase.from('notices').insert({ 
+        content: data.content, 
+        start_date: data.startDate, 
+        end_date: data.endDate,
+        owner_id: data.ownerId 
+      }).select(),
+    update: (id: string, data: { content?: string, startDate?: string, endDate?: string }) => {
+      const payload: any = {};
+      if (data.content !== undefined) payload.content = data.content;
+      if (data.startDate !== undefined) payload.start_date = data.startDate;
+      if (data.endDate !== undefined) payload.end_date = data.endDate;
+      return supabase.from('notices').update(payload).eq('id', id);
+    },
     delete: (id: string) => supabase.from('notices').delete().eq('id', id),
   }
 };

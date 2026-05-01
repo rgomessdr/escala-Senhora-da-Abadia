@@ -231,6 +231,8 @@ CREATE TABLE IF NOT EXISTS notices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   content TEXT NOT NULL,
   active BOOLEAN DEFAULT TRUE,
+  start_date DATE,
+  end_date DATE,
   owner_id UUID DEFAULT auth.uid(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -301,7 +303,7 @@ export default function App() {
   const [view, setView] = useState<View>('dashboard');
   const [servers, setServers] = useState<Server[]>([]);
   const [masses, setMasses] = useState<Mass[]>([]);
-  const [notices, setNotices] = useState<{id: string, content: string, ownerId: string}[]>([]);
+  const [notices, setNotices] = useState<{id: string, content: string, startDate?: string, endDate?: string, ownerId: string}[]>([]);
   const [communities, setCommunities] = useState<Community[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -516,6 +518,8 @@ export default function App() {
       setNotices((noticesRes.data || []).map(n => ({
         id: n.id,
         content: n.content,
+        startDate: n.start_date,
+        endDate: n.end_date,
         ownerId: n.owner_id
       })));
     } catch (err: any) {
@@ -635,10 +639,13 @@ export default function App() {
     }
   };
 
-  const addNotice = async (content: string) => {
+  const addNotice = async (data: { content: string, startDate?: string, endDate?: string }) => {
     if (!user) return;
     try {
-      const { error } = await sdb.notices.insert(content, user.id);
+      const { error } = await sdb.notices.insert({
+        ...data,
+        ownerId: user.id
+      });
       if (error) throw error;
       fetchData();
     } catch (err) {
@@ -646,10 +653,10 @@ export default function App() {
     }
   };
 
-  const updateNotice = async (id: string, content: string) => {
+  const updateNotice = async (id: string, data: { content?: string, startDate?: string, endDate?: string }) => {
     if (!user) return;
     try {
-      const { error } = await sdb.notices.update(id, content);
+      const { error } = await sdb.notices.update(id, data);
       if (error) throw error;
       fetchData();
     } catch (err) {
@@ -2730,6 +2737,13 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
     m.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const activeNotices = notices.filter(n => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const start = n.startDate || '0000-00-00';
+    const end = n.endDate || '9999-12-31';
+    return todayStr >= start && todayStr <= end;
+  });
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
       <div className="max-w-4xl mx-auto space-y-8">
@@ -2745,28 +2759,28 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
         </header>
 
         {/* Central de Comunicados / Avisos */}
-        {notices && notices.length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-3xl p-1 shadow-xl relative overflow-hidden border border-indigo-100"
-          >
-            <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white relative overflow-hidden">
-              <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-              
-              <div className="relative z-10 space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20">
-                    <Megaphone size={24} className="text-indigo-100" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-black uppercase tracking-widest leading-none">Mural de Avisos</h3>
-                    <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1 opacity-80">Informações Importantes da Paróquia</p>
-                  </div>
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white rounded-3xl p-1 shadow-xl relative overflow-hidden border border-indigo-100"
+        >
+          <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+            
+            <div className="relative z-10 space-y-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20">
+                  <Megaphone size={24} className="text-indigo-100" />
                 </div>
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-widest leading-none">Mural de Avisos</h3>
+                  <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1 opacity-80">Informações Importantes da Paróquia</p>
+                </div>
+              </div>
 
+              {activeNotices.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {notices.map((n, i) => (
+                  {activeNotices.map((n, i) => (
                     <motion.div 
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -2781,10 +2795,15 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
                     </motion.div>
                   ))}
                 </div>
-              </div>
+              ) : (
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 bg-black/10 rounded-3xl border border-white/10">
+                  <Bell size={40} className="text-indigo-300/50" />
+                  <p className="text-sm font-black uppercase tracking-widest text-indigo-100">Não há avisos ou comunicados no momento</p>
+                </div>
+              )}
             </div>
-          </motion.div>
-        )}
+          </div>
+        </motion.div>
 
         <div className="relative group">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-600 transition-colors" size={20} />
@@ -2954,6 +2973,8 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
   const [showPublicPanel, setShowPublicPanel] = useState(false);
   const [isNotifying, setIsNotifying] = useState(false);
   const [noticeContent, setNoticeContent] = useState('');
+  const [noticeStartDate, setNoticeStartDate] = useState('');
+  const [noticeEndDate, setNoticeEndDate] = useState('');
   const [showNoticeManager, setShowNoticeManager] = useState(false);
 
   const publicUrl = `${window.location.origin}${window.location.pathname}?view=public`;
@@ -3071,8 +3092,14 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
   const handleAddNotice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!noticeContent.trim()) return;
-    addNotice(noticeContent);
+    addNotice({ 
+      content: noticeContent, 
+      startDate: noticeStartDate || undefined, 
+      endDate: noticeEndDate || undefined 
+    });
     setNoticeContent('');
+    setNoticeStartDate('');
+    setNoticeEndDate('');
   };
 
   return (
@@ -3150,34 +3177,73 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
             </div>
             
             {isAdmin && (
-              <form onSubmit={handleAddNotice} className="flex gap-2">
-                <input 
-                  type="text" 
-                  value={noticeContent}
-                  onChange={e => setNoticeContent(e.target.value)}
-                  placeholder="DIGITE UM NOVO COMUNICADO..."
-                  className="flex-1 p-4 bg-white border border-indigo-100 rounded-2xl text-xs font-bold uppercase tracking-wider outline-none focus:ring-4 focus:ring-indigo-200/50"
-                />
-                <button type="submit" className="px-6 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2">
-                  <Plus size={16} /> Postar
-                </button>
+              <form onSubmit={handleAddNotice} className="flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={noticeContent}
+                    onChange={e => setNoticeContent(e.target.value)}
+                    placeholder="DIGITE UM NOVO COMUNICADO..."
+                    className="flex-1 p-4 bg-white border border-indigo-100 rounded-2xl text-xs font-bold uppercase tracking-wider outline-none focus:ring-4 focus:ring-indigo-200/50"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="flex-1 min-w-[140px] relative">
+                    <span className="absolute -top-1.5 left-3 px-1 bg-indigo-50 text-[8px] font-black text-indigo-400 uppercase tracking-tighter">Início</span>
+                    <input 
+                      type="date" 
+                      value={noticeStartDate}
+                      onChange={e => setNoticeStartDate(e.target.value)}
+                      className="w-full p-3 bg-white border border-indigo-100 rounded-xl text-[10px] font-bold uppercase outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-[140px] relative">
+                    <span className="absolute -top-1.5 left-3 px-1 bg-indigo-50 text-[8px] font-black text-indigo-400 uppercase tracking-tighter">Término</span>
+                    <input 
+                      type="date" 
+                      value={noticeEndDate}
+                      onChange={e => setNoticeEndDate(e.target.value)}
+                      className="w-full p-3 bg-white border border-indigo-100 rounded-xl text-[10px] font-bold uppercase outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                  </div>
+                  <button type="submit" className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-900 transition-all flex items-center gap-2 grow md:grow-0 justify-center">
+                    <Plus size={16} /> Postar
+                  </button>
+                </div>
               </form>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
               {notices.map((n: any) => (
-                <div key={n.id} className="group bg-white p-4 rounded-2xl border border-indigo-100 flex items-start justify-between gap-4 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-                    <p className="text-[11px] font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.content}</p>
+                <div key={n.id} className="group bg-white p-4 rounded-2xl border border-indigo-100 flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
+                      <p className="text-[11px] font-bold text-slate-700 leading-relaxed uppercase tracking-tight">{n.content}</p>
+                    </div>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => removeNotice(n.id)}
+                        className="p-1 text-slate-200 hover:text-rose-500 transition-colors shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                   </div>
-                  {isAdmin && (
-                    <button 
-                      onClick={() => removeNotice(n.id)}
-                      className="p-1 text-slate-200 hover:text-rose-500 transition-colors shrink-0"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                  
+                  {(n.startDate || n.endDate) && (
+                    <div className="flex items-center gap-3 pt-2 border-t border-slate-50">
+                      {n.startDate && (
+                        <div className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+                          <Calendar size={10} className="text-indigo-300" /> {n.startDate.split('-').reverse().join('/')}
+                        </div>
+                      )}
+                      {n.endDate && (
+                        <div className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
+                          <X size={10} className="text-rose-300" /> {n.endDate.split('-').reverse().join('/')}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
