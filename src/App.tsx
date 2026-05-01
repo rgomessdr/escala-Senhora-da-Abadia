@@ -278,6 +278,11 @@ export default function App() {
     }
 
     const checkConn = async () => {
+      // Safety timeout to prevent permanent blank screen
+      const timeoutId = setTimeout(() => {
+        setLoading(false);
+      }, 3000);
+
       try {
         console.log("Checking Supabase connection...");
         const res = await checkSupabaseConnection();
@@ -289,6 +294,7 @@ export default function App() {
       } catch (err) {
         console.error("Failed to check connection:", err);
       } finally {
+        clearTimeout(timeoutId);
         setLoading(false);
       }
     };
@@ -874,7 +880,7 @@ export default function App() {
           <NavTab active={view === 'members'} onClick={() => setView('members')} label="Membros" />
           <NavTab active={view === 'communities'} onClick={() => setView('communities')} label="Comunidades" />
           <NavTab active={view === 'masses'} onClick={() => setView('masses')} label="Missas" />
-          {isSuperAdmin && <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />}
+          {isAdmin && <NavTab active={view === 'users_admin'} onClick={() => setView('users_admin')} label="Administradores" />}
           <NavTab active={view === 'schedule'} onClick={() => setView('schedule')} label={isAdmin ? "Montar Escala" : "Ver Escalas"} />
           <NavTab active={view === 'profile'} onClick={() => setView('profile')} label={user.user_metadata?.display_name || 'Meu Perfil'} />
         </div>
@@ -924,7 +930,7 @@ export default function App() {
                 <NavButtonView active={view === 'members'} onClick={() => { setView('members'); setIsSidebarOpen(false); }} icon={<Users size={18} />} label="Membros" />
                 <NavButtonView active={view === 'communities'} onClick={() => { setView('communities'); setIsSidebarOpen(false); }} icon={<MapPin size={18} />} label="Comunidades" />
                 <NavButtonView active={view === 'masses'} onClick={() => { setView('masses'); setIsSidebarOpen(false); }} icon={<LogoImage size={18} />} label="Missas" />
-                {isSuperAdmin && <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Administradores" />}
+                {isAdmin && <NavButtonView active={view === 'users_admin'} onClick={() => { setView('users_admin'); setIsSidebarOpen(false); }} icon={<UserPlus size={18} />} label="Administradores" />}
                 <NavButtonView active={view === 'schedule'} onClick={() => { setView('schedule'); setIsSidebarOpen(false); }} icon={<Calendar size={18} />} label="Montagem" />
                 <NavButtonView active={view === 'profile'} onClick={() => { setView('profile'); setIsSidebarOpen(false); }} icon={<Settings size={18} />} label="Meu Perfil" />
               </div>
@@ -1027,9 +1033,10 @@ export default function App() {
             {view === 'members' && <MembersView servers={servers} onAdd={addServer} onUpdate={updateServer} onDelete={removeServer} stats={serverStats} isAdmin={isAdmin} />}
             {view === 'communities' && <CommunitiesView communities={communities} onAdd={addCommunity} onUpdate={updateCommunity} onDelete={removeCommunity} isAdmin={isAdmin} />}
             {view === 'profile' && <ProfileView user={user} />}
-            {view === 'users_admin' && isSuperAdmin && (
+            {view === 'users_admin' && isAdmin && (
               <UsersAdminView 
                 users={authorizedEmails} 
+                isSuperAdmin={isSuperAdmin}
                 onAdd={async (email: string, role: string, pass: string) => {
                   try {
                     // Autorizar no banco
@@ -1100,7 +1107,7 @@ export default function App() {
   );
 }
 
-function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
+function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
