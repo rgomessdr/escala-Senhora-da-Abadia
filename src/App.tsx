@@ -2838,11 +2838,11 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" /> Coroinhas
                       </p>
                       <div className="space-y-1.5">
-                        {featuredMass.assignments.coroinhas.map(id => {
+                        {featuredMass.assignments.coroinhas.filter(id => servers.some(sv => sv.id === id)).map(id => {
                           const s = servers.find(sv => sv.id === id);
                           return (
                             <div key={id} className="text-[10px] font-black text-slate-700 uppercase truncate bg-white px-2 py-1 rounded-lg border border-slate-100">
-                              {s?.name || '...'}
+                              {s?.name}
                             </div>
                           )
                         })}
@@ -2854,11 +2854,11 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" /> Acólitos
                       </p>
                       <div className="space-y-1.5">
-                        {featuredMass.assignments.acolitos.map(id => {
+                        {featuredMass.assignments.acolitos.filter(id => servers.some(sv => sv.id === id)).map(id => {
                           const s = servers.find(sv => sv.id === id);
                           return (
                             <div key={id} className="text-[10px] font-black text-slate-700 uppercase truncate bg-white px-2 py-1 rounded-lg border border-slate-100">
-                              {s?.name || '...'}
+                              {s?.name}
                             </div>
                           )
                         })}
@@ -2902,12 +2902,12 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
                        <span className="w-2 h-2 bg-blue-600 rounded-full" /> Coroinhas
                     </h4>
                     <div className="space-y-2">
-                      {m.assignments.coroinhas.length > 0 ? m.assignments.coroinhas.map(id => {
+                      {m.assignments.coroinhas.filter(id => servers.some(sv => sv.id === id)).length > 0 ? m.assignments.coroinhas.filter(id => servers.some(sv => sv.id === id)).map(id => {
                         const s = servers.find(sv => sv.id === id);
                         return (
                           <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
-                            <div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 text-[10px]">{s?.name?.[0] || '?'}</div>
-                            {s?.name || 'Carregando...'}
+                            <div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 text-[10px]">{s?.name?.[0]}</div>
+                            {s?.name}
                           </div>
                         );
                       }) : <p className="text-[10px] text-slate-400 italic font-bold uppercase">Nenhum coroinha escalado</p>}
@@ -2919,12 +2919,12 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
                        <span className="w-2 h-2 bg-indigo-600 rounded-full" /> Acólitos
                     </h4>
                     <div className="space-y-2">
-                      {m.assignments.acolitos.length > 0 ? m.assignments.acolitos.map(id => {
+                      {m.assignments.acolitos.filter(id => servers.some(sv => sv.id === id)).length > 0 ? m.assignments.acolitos.filter(id => servers.some(sv => sv.id === id)).map(id => {
                         const s = servers.find(sv => sv.id === id);
                         return (
                           <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
-                            <div className="w-6 h-6 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 text-[10px]">{s?.name?.[0] || '?'}</div>
-                            {s?.name || 'Carregando...'}
+                            <div className="w-6 h-6 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 text-[10px]">{s?.name?.[0]}</div>
+                            {s?.name}
                           </div>
                         );
                       }) : <p className="text-[10px] text-slate-400 italic font-bold uppercase">Nenhum acólito escalado</p>}
