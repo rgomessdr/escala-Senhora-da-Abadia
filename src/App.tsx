@@ -1782,15 +1782,16 @@ function AuthView({
 
       <div className="flex-1 flex items-center justify-center p-6 relative z-10">
         <div className="w-full max-w-md">
-          <div className="flex flex-col items-center mb-8">
-            <div className="mb-6 transform hover:scale-105 transition-transform cursor-default relative">
-              <LogoImage size={96} className="drop-shadow-2xl" />
-              <div className="absolute -top-1 -right-1 bg-amber-400 w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-indigo-900 shadow-sm z-10">
+          <div className="flex flex-col items-center mb-10">
+            <div className="mb-8 transform hover:scale-110 transition-all duration-500 cursor-default relative group">
+              <div className="absolute inset-0 bg-amber-400/20 blur-xl rounded-full scale-0 group-hover:scale-150 transition-transform duration-700 opacity-0 group-hover:opacity-100" />
+              <LogoImage size={120} className="drop-shadow-2xl relative z-10" />
+              <div className="absolute -top-1 -right-1 bg-amber-400 w-8 h-8 rounded-full border-4 border-white flex items-center justify-center text-slate-900 shadow-xl z-20">
                 <span className="text-[10px] font-black">MS</span>
               </div>
             </div>
-            <h1 className="text-3xl font-display font-black text-slate-900 tracking-tight text-center">Nossa Senhora da Abadia</h1>
-            <p className="text-slate-500 font-bold uppercase tracking-[0.2em] text-[10px] mt-2">Paróquia de Sidrolândia • MS</p>
+            <h1 className="text-4xl font-display font-black text-slate-900 tracking-tight text-center uppercase">Nossa Senhora da Abadia</h1>
+            <p className="text-slate-400 font-bold uppercase tracking-[0.3em] text-[10px] mt-3 pb-1 border-b-2 border-amber-400 inline-block px-2">Paróquia de Sidrolândia</p>
           </div>
 
           <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-2xl p-8 space-y-6 backdrop-blur-sm bg-white/95 relative overflow-hidden">
@@ -3142,10 +3143,7 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
           )}
         </div>
 
-        <footer className="pt-8 pb-12 border-t border-slate-200 text-center space-y-2">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Paróquia Nossa Senhora da Abadia</p>
-          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
-        </footer>
+        <Footer />
       </div>
     </div>
   );
@@ -3153,76 +3151,83 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
 
 function Footer() {
   return (
-    <footer className="bg-[#fcf9f2] border-t border-[#eee5d3] pt-16 pb-8 mt-auto">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8 border-b border-[#eee5d3] pb-16">
+    <footer className="bg-[#fcf9f2] border-t border-[#eee5d3] pt-20 pb-10 mt-auto">
+      <div className="max-w-7xl mx-auto px-6 lg:px-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-16 lg:gap-12 border-b border-[#eee5d3] pb-20">
           {/* Logo & Description */}
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-black tracking-tighter text-[#1b4332] uppercase">
-                Abadia<span className="text-[#b8860b]">Sidro</span>
-              </span>
+          <div className="space-y-8">
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col">
+                <span className="text-3xl font-black tracking-tighter leading-none">
+                  <span className="text-[#1b4332]">ABADIA</span>
+                  <span className="text-[#b19451]">SIDRO</span>
+                </span>
+              </div>
             </div>
-            <p className="text-[11px] font-bold text-[#4a3728] leading-relaxed opacity-80 uppercase tracking-tight">
-              O portal oficial das escalas de Acólitos e Coroinhas da Paróquia Nossa Senhora da Abadia. 
-              Servindo à comunidade de Sidrolândia com fidelidade e zelo litúrgico.
+            <p className="text-[11px] font-bold text-[#4a3728] leading-relaxed opacity-70 uppercase tracking-tight max-w-[240px]">
+              O portal oficial de escalas e sorteios de Sidrolândia. Conectamos você à fé e ao serviço com total transparência e segurança.
             </p>
-            <div className="flex gap-4">
-              <a href="#" className="text-[10px] font-black text-[#4a3728] uppercase tracking-widest hover:text-[#b8860b] transition-colors underline decoration-2 underline-offset-4">Instagram</a>
-              <a href="#" className="text-[10px] font-black text-[#4a3728] uppercase tracking-widest hover:text-[#b8860b] transition-colors underline decoration-2 underline-offset-4">Facebook</a>
+            <div className="flex gap-6 pt-2">
+              <a href="#" className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] hover:text-[#b19451] transition-all border-b-4 border-[#1b4332] pb-1 hover:border-[#b19451]">INSTAGRAM</a>
+              <a href="#" className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] hover:text-[#b19451] transition-all border-b-4 border-[#1b4332] pb-1 hover:border-[#b19451]">FACEBOOK</a>
             </div>
           </div>
 
           {/* Navegação */}
-          <div className="space-y-6 md:pl-8">
-            <h4 className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] opacity-40">Navegação</h4>
-            <ul className="space-y-3">
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Início</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Membros</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Escalas</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Avisos</a></li>
+          <div className="space-y-8 lg:pl-10">
+            <h4 className="text-[11px] font-black text-[#1b4332] uppercase tracking-[0.3em]">Navegação</h4>
+            <ul className="space-y-4">
+              <li><a href="#" className="text-[11px] font-bold text-[#4a3728] hover:text-[#b19451] transition-colors uppercase tracking-widest opacity-80 decoration-0 hover:opacity-100">Todas as Escalas</a></li>
+              <li><a href="#" className="text-[11px] font-bold text-[#4a3728] hover:text-[#b19451] transition-colors uppercase tracking-widest opacity-80 decoration-0 hover:opacity-100">Equipes Parceiras</a></li>
+              <li><a href="#" className="text-[11px] font-bold text-[#4a3728] hover:text-[#b19451] transition-colors uppercase tracking-widest opacity-80 decoration-0 hover:opacity-100">Últimas Atualizações</a></li>
+              <li><a href="#" className="text-[11px] font-bold text-[#4a3728] hover:text-[#b19451] transition-colors uppercase tracking-widest opacity-80 decoration-0 hover:opacity-100">Sobre o Portal</a></li>
             </ul>
           </div>
 
           {/* Atendimento */}
-          <div className="space-y-6">
-            <h4 className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] opacity-40">Atendimento</h4>
-            <ul className="space-y-4">
-              <li className="flex items-center gap-3">
-                <Phone size={14} className="text-[#1b4332]" />
-                <span className="text-[10px] font-bold text-[#4a3728] tracking-widest leading-none">67 3272-1320</span>
+          <div className="space-y-8">
+            <h4 className="text-[11px] font-black text-[#1b4332] uppercase tracking-[0.3em]">Atendimento</h4>
+            <ul className="space-y-5">
+              <li className="flex items-center gap-4 group">
+                <div className="p-2 bg-white rounded-lg shadow-sm border border-[#eee5d3] group-hover:border-[#b19451] transition-colors">
+                  <Phone size={14} className="text-[#1b4332]" />
+                </div>
+                <span className="text-[11px] font-bold text-[#4a3728] tracking-widest leading-none">67 3272-1320</span>
               </li>
-              <li className="flex items-center gap-3">
-                <MessageCircle size={14} className="text-[#1b4332]" />
-                <span className="text-[10px] font-bold text-[#4a3728] tracking-widest leading-none">Falar no WhatsApp</span>
+              <li className="flex items-center gap-4 group">
+                <div className="p-2 bg-white rounded-lg shadow-sm border border-[#eee5d3] group-hover:border-[#b19451] transition-colors">
+                  <MessageCircle size={14} className="text-[#1b4332]" />
+                </div>
+                <span className="text-[11px] font-bold text-[#4a3728] tracking-widest leading-none uppercase">Falar no WhatsApp</span>
               </li>
-              <li className="flex items-center gap-3">
-                <Mail size={14} className="text-[#1b4332]" />
-                <span className="text-[10px] font-bold text-[#4a3728] tracking-widest leading-none">contato@abadiasidro.com.br</span>
+              <li className="flex items-center gap-4 group">
+                <div className="p-2 bg-white rounded-lg shadow-sm border border-[#eee5d3] group-hover:border-[#b19451] transition-colors">
+                  <Mail size={14} className="text-[#1b4332]" />
+                </div>
+                <span className="text-[11px] font-bold text-[#4a3728] tracking-widest leading-none">contato@abadiasidro.com.br</span>
               </li>
             </ul>
           </div>
 
           {/* Institucional */}
-          <div className="space-y-6">
-            <h4 className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] opacity-40">Institucional</h4>
-            <ul className="space-y-3">
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Termos de Uso</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Política de Privacidade</a></li>
+          <div className="space-y-8">
+            <h4 className="text-[11px] font-black text-[#1b4332] uppercase tracking-[0.3em]">Institucional</h4>
+            <ul className="space-y-4">
+              <li><a href="#" className="text-[11px] font-bold text-[#4a3728] hover:text-[#b19451] transition-colors uppercase tracking-widest opacity-80 hover:opacity-100">Termos de Uso</a></li>
+              <li><a href="#" className="text-[11px] font-bold text-[#4a3728] hover:text-[#b19451] transition-colors uppercase tracking-widest opacity-80 hover:opacity-100">Política de Privacidade</a></li>
             </ul>
-            <div className="pt-2 text-[9px] font-black text-[#4a3728] opacity-30 uppercase tracking-[0.1em] leading-relaxed">
+            <div className="pt-4 text-[10px] font-bold text-[#4a3728] opacity-30 uppercase tracking-[0.1em] leading-relaxed">
               CNPJ: 03.262.536/0014-99<br />
-              Rua São Bento, 45 - Centro<br />
               Sidrolândia - MS
             </div>
           </div>
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[9px] font-black text-[#4a3728] uppercase tracking-[0.15em] opacity-30">
+        <div className="pt-10 flex flex-col md:flex-row items-center justify-between gap-6 text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] opacity-30">
           <div>© 2026 Abadia Sidro. Todos os direitos reservados.</div>
-          <div className="flex items-center gap-1">
-            Desenvolvido por <span className="text-[#1b4332]">SmartSystem</span>
+          <div className="flex items-center gap-2">
+            Desenvolvido por <span className="text-[#1b4332] font-black">SmartSystem</span>
           </div>
         </div>
       </div>
