@@ -2700,6 +2700,7 @@ function MassesView({ masses, onAdd, onUpdate, onDelete, communities, isAdmin }:
 
 function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Server[], notices: any[] }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [rotationIndex, setRotationIndex] = useState(0);
   
   // Filtrar missas futuras ou recentes
   const sortedMasses = [...masses].sort((a, b) => {
@@ -2707,14 +2708,22 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
     return dateDiff !== 0 ? dateDiff : a.time.localeCompare(b.time);
   });
 
-  // Highlight of the day (nearest/random upcoming mass)
+  // Group masses by the first available date (today or next event day)
   const today = new Date().toISOString().split('T')[0];
   const upcomingMasses = sortedMasses.filter(m => m.date >= today);
-  const featuredMass = useMemo(() => {
-    if (upcomingMasses.length === 0) return null;
-    // Prefer today's mass, or just the first upcoming one
-    return upcomingMasses[0];
-  }, [upcomingMasses]);
+  
+  const earliestDate = upcomingMasses.length > 0 ? upcomingMasses[0].date : null;
+  const massesForRotation = upcomingMasses.filter(m => m.date === earliestDate);
+
+  useEffect(() => {
+    if (massesForRotation.length <= 1) return;
+    const timer = setInterval(() => {
+      setRotationIndex(prev => (prev + 1) % massesForRotation.length);
+    }, 6000); // Alternar a cada 6 segundos
+    return () => clearInterval(timer);
+  }, [massesForRotation.length]);
+
+  const featuredMass = massesForRotation[rotationIndex] || null;
 
   const filteredMasses = sortedMasses.filter(m => 
     m.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -2777,73 +2786,94 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
           </motion.div>
         )}
 
-        {featuredMass && searchTerm === '' && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="relative bg-indigo-600 rounded-3xl p-6 text-white overflow-hidden shadow-xl"
-          >
-            <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-            <div className="relative z-10 space-y-6">
-              <div className="flex flex-col md:flex-row items-center gap-6">
-                <div className="w-20 h-20 bg-white/20 rounded-3xl flex flex-col items-center justify-center shrink-0 border border-white/20">
-                  <span className="text-[10px] font-black uppercase text-indigo-200">HOJE</span>
-                  <span className="text-3xl font-black">{featuredMass.date.split('-')[2]}</span>
-                </div>
-                <div className="text-center md:text-left flex-1">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200 mb-1">Destaque do Dia</p>
-                  <h2 className="text-xl font-black uppercase tracking-tight">{featuredMass.title}</h2>
-                  <div className="flex flex-wrap justify-center md:justify-start items-center gap-4 mt-2 text-xs font-bold text-indigo-100 uppercase tracking-widest">
-                    <span className="flex items-center gap-1"><Clock size={14} /> {featuredMass.time}</span>
-                    <span className="flex items-center gap-1"><MapPin size={14} /> {featuredMass.location}</span>
+        <AnimatePresence mode="wait">
+          {featuredMass && searchTerm === '' && (
+            <motion.div 
+              key={featuredMass.id}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.4 }}
+              className="relative bg-indigo-600 rounded-[2.5rem] p-7 md:p-10 text-white overflow-hidden shadow-2xl border-4 border-white/10"
+            >
+              <div className="absolute right-0 top-0 w-80 h-80 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+              
+              <div className="relative z-10 space-y-8">
+                {/* Header do Card */}
+                <div className="flex flex-col md:flex-row items-center gap-6">
+                  <div className="w-24 h-24 bg-white/20 rounded-[2rem] flex flex-col items-center justify-center shrink-0 border-2 border-white/20 backdrop-blur-md shadow-inner">
+                    <span className="text-[11px] font-black uppercase text-indigo-200 tracking-widest">{featuredMass.date === today ? 'HOJE' : 'DATA'}</span>
+                    <span className="text-4xl font-black">{featuredMass.date.split('-')[2]}</span>
+                  </div>
+                  <div className="text-center md:text-left flex-1">
+                    <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
+                       <span className="px-3 py-1 bg-white/20 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20">Destaque do Dia</span>
+                       {massesForRotation.length > 1 && (
+                         <span className="text-[10px] font-bold text-indigo-200 uppercase tracking-tighter">
+                           {rotationIndex + 1} de {massesForRotation.length}
+                         </span>
+                       )}
+                    </div>
+                    <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tight leading-none mb-3">{featuredMass.title}</h2>
+                    <div className="flex flex-wrap justify-center md:justify-start items-center gap-5 text-sm font-bold text-indigo-100 uppercase tracking-widest">
+                      <span className="flex items-center gap-2 bg-black/10 px-3 py-1.5 rounded-xl"><Clock size={16} /> {featuredMass.time}</span>
+                      <span className="flex items-center gap-2 bg-black/10 px-3 py-1.5 rounded-xl"><MapPin size={16} /> {featuredMass.location}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="bg-white/20 p-4 rounded-2xl flex items-center gap-4 border border-white/20 shrink-0">
-                  <div className="text-center">
-                    <p className="text-[8px] font-black text-indigo-100 uppercase mb-1">Acólitos</p>
-                    <p className="text-lg font-black">{featuredMass.assignments.acolitos.length}</p>
-                  </div>
-                  <div className="w-px h-8 bg-white/20" />
-                  <div className="text-center">
-                    <p className="text-[8px] font-black text-indigo-100 uppercase mb-1">Coroinhas</p>
-                    <p className="text-lg font-black">{featuredMass.assignments.coroinhas.length}</p>
-                  </div>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-6 border-t border-white/10">
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black text-indigo-200 uppercase tracking-[0.2em]">Escalados Acólitos</p>
-                  <div className="flex flex-wrap gap-2">
-                    {featuredMass.assignments.acolitos.map(id => {
-                      const s = servers.find(sv => sv.id === id);
-                      return (
-                        <div key={id} className="px-3 py-2 bg-white/10 rounded-xl text-[10px] font-black border border-white/10 backdrop-blur-md">
-                          {s?.name || '...'}
-                        </div>
-                      )
-                    })}
-                    {featuredMass.assignments.acolitos.length === 0 && <p className="text-[10px] text-indigo-300/50 italic font-bold">Nenhum acólito escalado</p>}
+                {/* Grid de Escalados */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-8 border-t border-white/10">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                       <p className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.3em]">Acólitos Escalados</p>
+                       <span className="text-xs font-black bg-white/10 px-2 py-0.5 rounded-lg border border-white/10">{featuredMass.assignments.acolitos.length}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {featuredMass.assignments.acolitos.map(id => {
+                        const s = servers.find(sv => sv.id === id);
+                        return (
+                          <motion.div 
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            key={id} 
+                            className="px-4 py-2.5 bg-white/10 rounded-2xl text-[11px] font-black border border-white/10 backdrop-blur-xl hover:bg-white/20 transition-all cursor-default"
+                          >
+                            {s?.name || '...'}
+                          </motion.div>
+                        )
+                      })}
+                      {featuredMass.assignments.acolitos.length === 0 && <p className="text-[11px] text-indigo-300/40 italic font-bold">Aguardando escala...</p>}
+                    </div>
                   </div>
-                </div>
-                <div className="space-y-3">
-                  <p className="text-[9px] font-black text-indigo-200 uppercase tracking-[0.2em]">Escalados Coroinhas</p>
-                  <div className="flex flex-wrap gap-2">
-                    {featuredMass.assignments.coroinhas.map(id => {
-                      const s = servers.find(sv => sv.id === id);
-                      return (
-                        <div key={id} className="px-3 py-2 bg-white/10 rounded-xl text-[10px] font-black border border-white/10 backdrop-blur-md">
-                          {s?.name || '...'}
-                        </div>
-                      )
-                    })}
-                    {featuredMass.assignments.coroinhas.length === 0 && <p className="text-[10px] text-indigo-300/50 italic font-bold">Nenhum coroinha escalado</p>}
+
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                       <p className="text-[10px] font-black text-indigo-200 uppercase tracking-[0.3em]">Coroinhas Escalados</p>
+                       <span className="text-xs font-black bg-white/10 px-2 py-0.5 rounded-lg border border-white/10">{featuredMass.assignments.coroinhas.length}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {featuredMass.assignments.coroinhas.map(id => {
+                        const s = servers.find(sv => sv.id === id);
+                        return (
+                          <motion.div 
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            key={id} 
+                            className="px-4 py-2.5 bg-white/10 rounded-2xl text-[11px] font-black border border-white/10 backdrop-blur-xl hover:bg-white/20 transition-all cursor-default"
+                          >
+                            {s?.name || '...'}
+                          </motion.div>
+                        )
+                      })}
+                      {featuredMass.assignments.coroinhas.length === 0 && <p className="text-[11px] text-indigo-300/40 italic font-bold">Aguardando escala...</p>}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="relative group">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
