@@ -60,26 +60,52 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
   
   useEffect(() => {
     let isMounted = true;
+    
     const fetchLogo = async () => {
       try {
         if (!supabase) return;
         
-        // Tentamos buscar, mas se falhar por falta de permissão ou tabela, apenas ignoramos
         const { data, error } = await supabase
           .from('system_settings')
           .select('value')
-          .eq('key', 'app_logo')
-          .single();
+          .eq('key', 'app_logo');
           
-        if (isMounted && !error && data && data.value) {
-          setLogoUrl(data.value);
+        if (isMounted) {
+          if (!error && data && data.length > 0 && data[0].value) {
+            console.log("Custom logo loaded successfully");
+            setLogoUrl(data[0].value);
+            setHasError(false);
+          } else {
+            setLogoUrl(APP_LOGO_URL);
+          }
         }
       } catch (err) {
-        // Silencioso para não travar o app
+        if (isMounted) setLogoUrl(APP_LOGO_URL);
       }
     };
+
     fetchLogo();
-    return () => { isMounted = false; };
+
+    // Inscrição Realtime para atualizar a logo instantaneamente em todos os lugares
+    const channel = supabase.channel('system_settings_changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'system_settings',
+        filter: 'key=eq.app_logo' 
+      }, (payload: any) => {
+        if (isMounted && payload.new && payload.new.value) {
+          console.log("Logo updated via Realtime");
+          setLogoUrl(payload.new.value);
+          setHasError(false);
+        }
+      })
+      .subscribe();
+      
+    return () => { 
+      isMounted = false; 
+      if (supabase) supabase.removeChannel(channel);
+    };
   }, []);
 
   const iconSize = Math.max(16, size / 2);
@@ -102,9 +128,11 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
     >
       <img 
         src={logoUrl} 
+        key={logoUrl}
         alt="Logo" 
         className="w-full h-full object-contain"
         onError={() => {
+          console.warn("Logo failed to load:", logoUrl.substring(0, 50) + "...");
           if (logoUrl !== APP_LOGO_URL) {
             setLogoUrl(APP_LOGO_URL);
           } else {
@@ -1123,8 +1151,8 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any)
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 1024 * 500) { 
-      alert("A imagem é muito grande (máx 500KB).");
+    if (file.size > 1024 * 600) { 
+      alert("A imagem é muito grande (máx 600KB). Tente uma imagem menor.");
       return;
     }
 
@@ -1133,21 +1161,26 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any)
     reader.onloadend = async () => {
       const base64String = reader.result as string;
       try {
+        if (!supabase) throw new Error("Supabase não configurado");
+
         const { error } = await supabase
           .from('system_settings')
-          .upsert({ key: 'app_logo', value: base64String });
+          .upsert({ key: 'app_logo', value: base64String }, { onConflict: 'key' });
         
         if (error) {
-          if (error.message.includes("not find the table")) {
+          console.error("Supabase Error:", error);
+          if (error.message.includes("not find the table") || error.code === 'PGRST116') {
             setShowSqlHelp(true);
-            throw new Error("Tabela de configurações não encontrada. Veja as instruções abaixo.");
+            throw new Error("Tabela 'system_settings' não encontrada ou sem acesso. Clique em 'Mostrar Instruções SQL' abaixo.");
           }
           throw error;
         }
-        alert("Logo atualizada!");
-        window.location.reload(); // Recarregar para garantir atualização em todos os componentes
+        
+        alert("Logo atualizada com sucesso! A mudança deve aparecer em instantes.");
+        // Se o Realtime não funcionar, o reload garante
+        setTimeout(() => window.location.reload(), 1500);
       } catch (err: any) {
-        alert(err.message);
+        alert("Erro: " + err.message);
       } finally {
         setLogoUploading(false);
       }
@@ -1298,19 +1331,30 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate, isSuperAdmin }: any)
                 </p>
                 {showSqlHelp && (
                   <div className="pt-2 border-t border-amber-200">
-                    <p className="text-[8px] text-rose-600 font-black uppercase mb-2">Ação Necessária no Supabase:</p>
-                    <pre className="bg-slate-900 text-slate-100 p-2 rounded text-[7px] overflow-x-auto font-mono">
-                      {`CREATE TABLE IF NOT EXISTS system_settings (
+                    <p className="text-[8px] text-rose-600 font-black uppercase mb-2">Ação Necessária no SQL Editor do Supabase:</p>
+                    <div className="relative group">
+                      <pre className="bg-slate-900 text-slate-100 p-2 rounded text-[7px] overflow-x-auto font-mono whitespace-pre-wrap">
+                        {`-- 1. Criar a tabela
+CREATE TABLE IF NOT EXISTS public.system_settings (
   key TEXT PRIMARY KEY,
   value TEXT,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
-INSERT INTO system_settings (key, value) VALUES ('app_logo', '/logotipo-principal.png') ON CONFLICT DO NOTHING;
-ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Config View" ON system_settings FOR SELECT USING (true);
-CREATE POLICY "Config Mod" ON system_settings FOR ALL USING (true);`}
-                    </pre>
-                    <p className="text-[8px] text-amber-600 mt-2 italic font-bold">Copie este código e rode no SQL Editor do seu Supabase para habilitar a troca de logo.</p>
+
+-- 2. Habilitar RLS e Políticas
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public View" ON public.system_settings;
+CREATE POLICY "Public View" ON public.system_settings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Public Mod" ON public.system_settings;
+CREATE POLICY "Public Mod" ON public.system_settings FOR ALL USING (true);
+
+-- 3. Habilitar Realtime (Opcional mas recomendado)
+ALTER PUBLICATION supabase_realtime ADD TABLE system_settings;`}
+                      </pre>
+                    </div>
+                    <p className="text-[8px] text-amber-600 mt-2 font-bold leading-tight">
+                      Copie o código acima, vá no painel do Supabase {'>'} SQL Editor {'>'} New Query e clique em RUN. Isso permitirá que o sistema salve sua logo personalizada.
+                    </p>
                   </div>
                 )}
                 <button 
