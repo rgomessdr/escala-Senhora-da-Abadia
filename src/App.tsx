@@ -879,12 +879,17 @@ export default function App() {
         
         // Rule: Siblings MUST serve in the same mass
         if (server.siblings && server.siblings.length > 0) {
-          const siblingElsewhereToday = server.siblings.some(sid => 
+          // If any sibling is already assigned TODAY, they MUST be in THIS mass
+          const siblingSomewhereElseToday = server.siblings.some(sid => 
             peopleAssignedOnDate[mass.date].has(sid) && 
             !currentAcolitos.includes(sid) && 
             !currentCoroinhas.includes(sid)
           );
-          if (siblingElsewhereToday) return { allowed: false };
+          if (siblingSomewhereElseToday) return { allowed: false };
+
+          // New logic: If this server is being picked, check if siblings SHOULD be here
+          // This is a soft check, the loop below will handle the actual "grouping" 
+          // by preferring siblings if one of them is already in the currentAssignments
         }
 
         // Rule: No same person on the same day
@@ -953,8 +958,7 @@ export default function App() {
       };
 
       // Fill Acolitos
-      if (newAcolitos.length < acolitosTarget) {
-        const needed = acolitosTarget - newAcolitos.length;
+      while (newAcolitos.length < acolitosTarget) {
         const available = servers
           .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas) }))
           .filter(res => res.allowed)
@@ -962,6 +966,13 @@ export default function App() {
             if (a.isForced && !b.isForced) return -1;
             if (!a.isForced && b.isForced) return 1;
             
+            // Siblings priority: If a sibling is already in this mass, prioritize this candidate
+            const hasSiblingInMassA = a.s.siblings && a.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
+            const hasSiblingInMassB = b.s.siblings && b.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
+            
+            if (hasSiblingInMassA && !hasSiblingInMassB) return -1;
+            if (!hasSiblingInMassA && hasSiblingInMassB) return 1;
+
             let scoreA = currentStats[a.s.id] || 0;
             let scoreB = currentStats[b.s.id] || 0;
             if ((a.s.name.includes("Ana Gabrielly") || a.s.name.includes("Lucas Andreetta") || a.s.name.includes("Pedro Lucas")) && dayOfWeek === 2) scoreA += 5;
@@ -971,32 +982,37 @@ export default function App() {
             return scoreA - scoreB;
           });
         
-        const selected = available.slice(0, needed);
-        selected.forEach(res => {
-          newAcolitos.push(res.s.id);
-          currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
-          peopleAssignedOnDate[mass.date].add(res.s.id);
-        });
+        if (available.length === 0) break;
+        const res = available[0];
+        newAcolitos.push(res.s.id);
+        currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
+        peopleAssignedOnDate[mass.date].add(res.s.id);
       }
 
       // Fill Coroinhas
-      if (newCoroinhas.length < coroinhasTarget) {
-        const needed = coroinhasTarget - newCoroinhas.length;
+      while (newCoroinhas.length < coroinhasTarget) {
         const available = servers
           .map(s => ({ s, ...tryAssign(s, newAcolitos, newCoroinhas) }))
           .filter(res => res.allowed)
           .sort((a, b) => {
             if (a.isForced && !b.isForced) return -1;
             if (!a.isForced && b.isForced) return 1;
+
+            // Siblings priority: If a sibling is already in this mass, prioritize this candidate
+            const hasSiblingInMassA = a.s.siblings && a.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
+            const hasSiblingInMassB = b.s.siblings && b.s.siblings.some(sid => newAcolitos.includes(sid) || newCoroinhas.includes(sid));
+            
+            if (hasSiblingInMassA && !hasSiblingInMassB) return -1;
+            if (!hasSiblingInMassA && hasSiblingInMassB) return 1;
+
             return (currentStats[a.s.id] || 0) - (currentStats[b.s.id] || 0);
           });
         
-        const selected = available.slice(0, needed);
-        selected.forEach(res => {
-          newCoroinhas.push(res.s.id);
-          currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
-          peopleAssignedOnDate[mass.date].add(res.s.id);
-        });
+        if (available.length === 0) break;
+        const res = available[0];
+        newCoroinhas.push(res.s.id);
+        currentStats[res.s.id] = (currentStats[res.s.id] || 0) + 1;
+        peopleAssignedOnDate[mass.date].add(res.s.id);
       }
 
       // Update local assignments for consecutive week check in this same run
