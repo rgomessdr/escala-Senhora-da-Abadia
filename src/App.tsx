@@ -1400,6 +1400,7 @@ export default function App() {
             )}
           </motion.div>
         </AnimatePresence>
+        <Footer />
       </main>
       
       {/* Loading Overlay */}
@@ -3140,28 +3141,34 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
           )}
         </div>
 
-        <footer className="pt-8 pb-12 border-t border-slate-200 text-center space-y-4">
-          <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-            <span className="flex items-center gap-1.5 underline decoration-2 underline-offset-4 decoration-amber-400">
-              CNPJ: 42.624.930/0001-66
-            </span>
-            <span className="hidden md:inline opacity-30">•</span>
-            <a 
-              href="https://wa.me/5567999536832" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors"
-            >
-              <MessageCircle size={12} /> Dúvidas e Ajuda: (67) 99953-6832
-            </a>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Paróquia Nossa Senhora da Abadia</p>
-            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
-          </div>
-        </footer>
+        <Footer />
       </div>
     </div>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="pt-8 pb-12 border-t border-slate-200 text-center space-y-4 mt-auto">
+      <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+        <span className="flex items-center gap-1.5 underline decoration-2 underline-offset-4 decoration-amber-400">
+          CNPJ: 42.624.930/0001-66
+        </span>
+        <span className="hidden md:inline opacity-30">•</span>
+        <a 
+          href="https://wa.me/5567999536832" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors"
+        >
+          <MessageCircle size={12} /> Dúvidas e Ajuda: (67) 99953-6832
+        </a>
+      </div>
+      <div className="space-y-1">
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Paróquia Nossa Senhora da Abadia</p>
+        <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
+      </div>
+    </footer>
   );
 }
 
