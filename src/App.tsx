@@ -877,12 +877,14 @@ export default function App() {
         // Rule: No same person in same mass
         if (currentAcolitos.includes(server.id) || currentCoroinhas.includes(server.id)) return { allowed: false };
         
-        // Rule: No siblings in same mass
+        // Rule: Siblings MUST serve in the same mass
         if (server.siblings && server.siblings.length > 0) {
-          const siblingIsAssigned = server.siblings.some(sid => 
-            currentAcolitos.includes(sid) || currentCoroinhas.includes(sid)
+          const siblingElsewhereToday = server.siblings.some(sid => 
+            peopleAssignedOnDate[mass.date].has(sid) && 
+            !currentAcolitos.includes(sid) && 
+            !currentCoroinhas.includes(sid)
           );
-          if (siblingIsAssigned) return { allowed: false };
+          if (siblingElsewhereToday) return { allowed: false };
         }
 
         // Rule: No same person on the same day
@@ -2306,7 +2308,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Vínculo de Irmãos</label>
-                  <p className="text-[9px] text-slate-400 font-bold mb-2">Marcados não caem na mesma escala</p>
+                  <p className="text-[9px] text-slate-400 font-bold mb-2">Marcados devem servir na mesma escala</p>
                   <div className="max-h-40 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
                     {servers.filter((s: any) => s.id !== editingId).map((s: any) => (
                       <button
