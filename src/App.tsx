@@ -746,6 +746,8 @@ export default function App() {
       ? masses.filter(m => configs[m.id]) 
       : [...masses];
 
+    const massIdsToProcess = new Set(massesToProcess.map(m => m.id));
+
     // Sort masses by date and time to process chronologically
     const sortedMasses = massesToProcess.sort((a, b) => {
       const dateDiff = a.date.localeCompare(b.date);
@@ -755,19 +757,26 @@ export default function App() {
     const currentStats = { ...serverStats };
     const peopleAssignedOnDate: Record<string, Set<string>> = {}; // date -> set of serverIds
     
-    // Pre-populate with existing manual assignments to respect "same day" rule correctly
+    // Pre-populate with existing manual assignments from masses NOT being re-processed
     masses.forEach(m => {
       if (!peopleAssignedOnDate[m.date]) peopleAssignedOnDate[m.date] = new Set();
-      m.assignments.acolitos.forEach(id => peopleAssignedOnDate[m.date].add(id));
-      m.assignments.coroinhas.forEach(id => peopleAssignedOnDate[m.date].add(id));
+      if (!massIdsToProcess.has(m.id)) {
+        m.assignments.acolitos.forEach(id => peopleAssignedOnDate[m.date].add(id));
+        m.assignments.coroinhas.forEach(id => peopleAssignedOnDate[m.date].add(id));
+      }
     });
 
     const localAssignments: Record<string, { acolitos: string[], coroinhas: string[] }> = {};
     masses.forEach(m => {
-      localAssignments[m.id] = { 
-        acolitos: [...m.assignments.acolitos], 
-        coroinhas: [...m.assignments.coroinhas] 
-      };
+      if (massIdsToProcess.has(m.id)) {
+        // Start fresh for masses we are processing
+        localAssignments[m.id] = { acolitos: [], coroinhas: [] };
+      } else {
+        localAssignments[m.id] = { 
+          acolitos: [...m.assignments.acolitos], 
+          coroinhas: [...m.assignments.coroinhas] 
+        };
+      }
     });
 
     for (const mass of sortedMasses) {
@@ -784,8 +793,8 @@ export default function App() {
       const acolitosTarget = config ? config.acolitos : (isMatriz ? 3 : (isSunday ? 2 : 1));
       const coroinhasTarget = config ? config.coroinhas : (isMatriz ? 4 : 2);
 
-      let newAcolitos = [...mass.assignments.acolitos];
-      let newCoroinhas = [...mass.assignments.coroinhas];
+      let newAcolitos = []; // Clear current assignments for re-scheduling
+      let newCoroinhas = []; // Clear current assignments for re-scheduling
 
       // Rule: Alternating Week (same time and location)
       const sevenDaysAgo = new Date(dateObj);
@@ -2717,45 +2726,59 @@ function PublicView({ masses, servers }: { masses: Mass[], servers: Server[] }) 
 
 function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(null);
+  const [locationFilter, setLocationFilter] = useState<string>('all');
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
   const [autoConfigs, setAutoConfigs] = useState<Record<string, { acolitos: number, coroinhas: number }>>({});
   const [selectedMassesForAuto, setSelectedMassesForAuto] = useState<Set<string>>(new Set());
   const [showPublicPanel, setShowPublicPanel] = useState(false);
   const publicUrl = `${window.location.origin}${window.location.pathname}?view=public`;
 
-  // Auto-select first mass when data arrives
+  const uniqueLocations = useMemo(() => {
+    const locs = new Set(masses.map((m: any) => m.location));
+    return ['all', ...Array.from(locs)];
+  }, [masses]);
+
+  const filteredMasses = useMemo(() => {
+    if (locationFilter === 'all') return masses;
+    return masses.filter((m: any) => m.location === locationFilter);
+  }, [masses, locationFilter]);
+
+  // Auto-select first mass when filtering changes
   useEffect(() => {
-    if (masses.length > 0 && !selectedMassId) {
-      setSelectedMassId(masses[0].id);
+    if (filteredMasses.length > 0) {
+      if (!selectedMassId || !filteredMasses.find((m: any) => m.id === selectedMassId)) {
+        setSelectedMassId(filteredMasses[0].id);
+      }
     }
-  }, [masses, selectedMassId]);
+  }, [filteredMasses, selectedMassId]);
 
   const copyPublicLink = () => {
     navigator.clipboard.writeText(publicUrl);
     alert("Link público copiado! Agora você pode enviar no WhatsApp.");
   };
 
-  // Initialize configs if empty and select all by default when opening
+  // Initialize configs if empty when opening
   useEffect(() => {
     if (isAutoModalOpen) {
-      if (Object.keys(autoConfigs).length === 0) {
-        const initialConfigs: Record<string, { acolitos: number, coroinhas: number }> = {};
-        masses.forEach((m: any) => {
-          const isMatriz = m.location.toLowerCase().includes('matriz');
-          const dateObj = new Date(m.date + 'T12:00:00');
-          const isSunday = dateObj.getDay() === 0;
-          initialConfigs[m.id] = { 
-            acolitos: isMatriz ? 3 : (isSunday ? 2 : 1), 
-            coroinhas: isMatriz ? 4 : 2 
-          };
-        });
-        setAutoConfigs(initialConfigs);
-      }
+      const initialConfigs: Record<string, { acolitos: number, coroinhas: number }> = {};
+      masses.forEach((m: any) => {
+        const isMatriz = m.location.toLowerCase().includes('matriz');
+        const dateObj = new Date(m.date + 'T12:00:00');
+        const isSunday = dateObj.getDay() === 0;
+        initialConfigs[m.id] = { 
+          acolitos: isMatriz ? 3 : (isSunday ? 2 : 1), 
+          coroinhas: isMatriz ? 4 : 2 
+        };
+      });
+      setAutoConfigs(initialConfigs);
+      
+      // Don't pre-select everything if already has selection
       if (selectedMassesForAuto.size === 0) {
-        setSelectedMassesForAuto(new Set(masses.map((m: any) => m.id)));
+        // By default select just the currently active mass to avoid overwhelming
+        if (selectedMassId) setSelectedMassesForAuto(new Set([selectedMassId]));
       }
     }
-  }, [isAutoModalOpen, masses]);
+  }, [isAutoModalOpen, masses, selectedMassId]);
 
   const toggleMassSelection = (id: string) => {
     const newSet = new Set(selectedMassesForAuto);
@@ -2884,13 +2907,30 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
          </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col gap-6">
+           <div className="flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
+              <div className="flex items-center gap-3 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm w-full md:w-auto">
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-3 pr-2">Comunidade:</span>
+                 <select 
+                   value={locationFilter}
+                   onChange={(e) => setLocationFilter(e.target.value)}
+                   className="flex-1 md:flex-none py-2 px-4 bg-slate-50 border-none rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-700 outline-none cursor-pointer hover:bg-slate-100 transition-colors"
+                 >
+                   {uniqueLocations.map(loc => (
+                     <option key={loc} value={loc}>
+                       {loc === 'all' ? 'Todas as Comunidades' : loc.toUpperCase()}
+                     </option>
+                   ))}
+                 </select>
+              </div>
+           </div>
+
            {/* Horizonal Mass Selector */}
            <div className="relative group shrink-0">
              <div 
                id="mass-selector"
                className="flex gap-4 overflow-x-auto pb-6 -mx-4 px-4 no-scrollbar scroll-smooth snap-x snap-mandatory"
              >
-               {masses.map((m: any) => (
+               {filteredMasses.map((m: any) => (
                  <button
                    key={m.id}
                    onClick={() => setSelectedMassId(m.id)}
