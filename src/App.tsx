@@ -968,10 +968,31 @@ export default function App() {
             const sib = servers.find(s => s.id === sid);
             // Only add if not already assigned to THIS or ANY OTHER mass today
             if (sib && !peopleAssignedOnDate[mass.date].has(sib.id)) {
+              // Note: we don't check tryAssign here because the "sibling together" rule 
+              // is the primary constraint. If the main person is allowed, we pull siblings.
               group.push(sib);
             }
           });
         }
+
+        // Count how many of each type in this group
+        const groupAcolitos = group.filter(p => p.type === 'acolito').length;
+        const groupCoroinhas = group.filter(p => p.type === 'coroinha').length;
+
+        // Respect targets: If adding this group exceeds the remaining slots or target is reached, skip
+        // BUT if target is 0, we treat it as 0 (don't add anything).
+        // If targets are set (e.g. 1 and 2), we only add if they FIT in the remaining space.
+        const remAcolitos = acolitosTarget - newAcolitos.length;
+        const remCoroinhas = coroinhasTarget - newCoroinhas.length;
+
+        // If the group has people for a role that is already full, we can't add the GROUP
+        // because siblings MUST serve together.
+        if (groupAcolitos > 0 && remAcolitos <= 0 && acolitosTarget > 0) return false;
+        if (groupCoroinhas > 0 && remCoroinhas <= 0 && coroinhasTarget > 0) return false;
+        
+        // If the group is larger than the total remaining slots, skip to stay within limits
+        if (groupAcolitos > remAcolitos && remAcolitos > 0) return false;
+        if (groupCoroinhas > remCoroinhas && remCoroinhas > 0) return false;
 
         group.forEach(p => {
           if (p.type === 'acolito') {
@@ -982,6 +1003,7 @@ export default function App() {
           currentStats[p.id] = (currentStats[p.id] || 0) + 1;
           peopleAssignedOnDate[mass.date].add(p.id);
         });
+        return true;
       };
 
       // Fill Acolitos
@@ -1007,7 +1029,15 @@ export default function App() {
           });
         
         if (available.length === 0) break;
-        assignGroup(available[0].s);
+        
+        let found = false;
+        for (const cand of available) {
+          if (assignGroup(cand.s)) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) break;
       }
 
       // Fill Coroinhas
@@ -1027,7 +1057,15 @@ export default function App() {
           });
         
         if (available.length === 0) break;
-        assignGroup(available[0].s);
+        
+        let found = false;
+        for (const cand of available) {
+          if (assignGroup(cand.s)) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) break;
       }
 
       // Update local assignments for consecutive week check in this same run
@@ -3079,6 +3117,8 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
 
   const publicUrl = `${window.location.origin}${window.location.pathname}?view=public`;
 
+  const [viewMode, setViewMode] = useState<'selected' | 'monthly'>('selected');
+
   const uniqueLocations = useMemo(() => {
     const locs = new Set(masses.map((m: any) => m.location));
     return ['all', ...Array.from(locs)];
@@ -3391,20 +3431,40 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-3 pr-2">Comunidade:</span>
                  <select 
                    value={locationFilter}
-                   onChange={(e) => setLocationFilter(e.target.value)}
+                   onChange={(e) => {
+                     setLocationFilter(e.target.value);
+                     if (e.target.value !== 'all') setViewMode('monthly');
+                   }}
                    className="flex-1 md:flex-none py-2 px-4 bg-slate-50 border-none rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-700 outline-none cursor-pointer hover:bg-slate-100 transition-colors"
                  >
                    {uniqueLocations.map(loc => (
                      <option key={loc} value={loc}>
-                       {loc === 'all' ? 'Todas as Comunidades' : loc.toUpperCase()}
+                       {loc === 'all' ? 'Todas' : loc.toUpperCase()}
                      </option>
                    ))}
                  </select>
               </div>
+
+              <div className="flex bg-slate-100 p-1 rounded-xl">
+                 <button 
+                   onClick={() => setViewMode('selected')}
+                   className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'selected' ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                 >
+                   Individual
+                 </button>
+                 <button 
+                   onClick={() => setViewMode('monthly')}
+                   className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'monthly' ? 'bg-white shadow text-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
+                 >
+                   Mensal
+                 </button>
+              </div>
            </div>
 
-           {/* Horizonal Mass Selector */}
-           <div className="relative group shrink-0">
+           {viewMode === 'selected' ? (
+             <>
+                {/* Horizonal Mass Selector */}
+                <div className="relative group shrink-0">
              <div 
                id="mass-selector"
                className="flex gap-4 overflow-x-auto pb-6 -mx-4 px-4 no-scrollbar scroll-smooth snap-x snap-mandatory"
@@ -3681,9 +3741,74 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                       </div>
                    </div>
                 </section>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scroll pb-20">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredMasses.map((m: any) => (
+                  <div key={m.id} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col gap-6 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-slate-900 rounded-xl flex flex-col items-center justify-center text-white shrink-0">
+                           <span className="text-[8px] font-black uppercase text-indigo-400 leading-none mb-1">{new Date(m.date + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'short' })}</span>
+                           <span className="text-lg font-black leading-none">{m.date.split('-')[2]}</span>
+                        </div>
+                        <div>
+                           <h4 className="text-xs font-black uppercase text-slate-900 tracking-tight leading-tight">{m.title}</h4>
+                           <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 tracking-widest flex items-center gap-1">
+                             <Clock size={10} /> {m.time} • <MapPin size={10} /> {m.location}
+                           </p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => { setSelectedMassId(m.id); setViewMode('selected'); }}
+                        className="p-2 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Editar Escala"
+                      >
+                        <ExternalLink size={16} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                         <div className="text-[8px] font-black text-blue-600 uppercase tracking-widest pb-1 border-b border-blue-50">Coroinhas</div>
+                         <div className="space-y-1">
+                           {m.assignments.coroinhas.length > 0 ? (
+                             m.assignments.coroinhas.map((id: string) => {
+                               const s = servers.find(sv => sv.id === id);
+                               return <div key={id} className="text-[10px] font-bold text-slate-600 truncate bg-slate-50 px-2 py-1 rounded-md">
+                                 {s?.name}
+                               </div>;
+                             })
+                           ) : (
+                             <span className="text-[9px] text-slate-300 italic font-medium uppercase text-center block">Vazio</span>
+                           )}
+                         </div>
+                      </div>
+                      <div className="space-y-2">
+                         <div className="text-[8px] font-black text-indigo-600 uppercase tracking-widest pb-1 border-b border-indigo-50">Acólitos</div>
+                         <div className="space-y-1">
+                           {m.assignments.acolitos.length > 0 ? (
+                             m.assignments.acolitos.map((id: string) => {
+                               const s = servers.find(sv => sv.id === id);
+                               return <div key={id} className="text-[10px] font-bold text-slate-600 truncate bg-slate-50 px-2 py-1 rounded-md">
+                                 {s?.name}
+                               </div>;
+                             })
+                           ) : (
+                             <span className="text-[9px] text-slate-300 italic font-medium uppercase text-center block">Vazio</span>
+                           )}
+                         </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
              </div>
-           )}
-        </div>
+          </div>
+        )}
+     </div>
       )}
 
       {/* Smart Assembly Modal */}
