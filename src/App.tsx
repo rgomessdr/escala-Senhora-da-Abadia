@@ -1401,6 +1401,33 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+      
+      <Footer />
+
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {isGenerating && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md"
+          >
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-6 max-w-xs w-full text-center">
+              <div className="relative">
+                 <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin" />
+                 <Layers className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600 animate-pulse" size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Montando Escala...</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 leading-relaxed">
+                  Por favor, aguarde enquanto o sistema distribui os servidores de forma inteligente.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -3951,7 +3978,6 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
      </div>
       )}
 
-      <Footer />
       {/* Smart Assembly Modal */}
       <AnimatePresence>
         {isAutoModalOpen && (
@@ -4074,32 +4100,6 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
               </div>
             </motion.div>
           </div>
-        )}
-      </AnimatePresence>
-
-      {/* Loading Overlay */}
-      <AnimatePresence>
-        {isGenerating && (
-
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md"
-          >
-            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-6 max-w-xs w-full text-center">
-              <div className="relative">
-                 <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin" />
-                 <Layers className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600 animate-pulse" size={24} />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Montando Escala...</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 leading-relaxed">
-                  Por favor, aguarde enquanto o sistema distribui os servidores de forma inteligente.
-                </p>
-              </div>
-            </div>
-          </motion.div>
         )}
       </AnimatePresence>
     </div>
