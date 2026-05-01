@@ -319,6 +319,7 @@ export default function App() {
   const isAdmin = isSuperAdmin || userRoleValue === 'admin';
 
   const [isPublicView, setIsPublicView] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -812,6 +813,7 @@ export default function App() {
 
   const autoSchedule = async (configs?: Record<string, { acolitos: number, coroinhas: number }>) => {
     if (!user || masses.length === 0 || servers.length === 0) return;
+    setIsGenerating(true);
     
     // Process only specific masses if config is provided, otherwise process all
     const massesToProcess = configs 
@@ -865,8 +867,8 @@ export default function App() {
       const acolitosTarget = config ? config.acolitos : 0;
       const coroinhasTarget = config ? config.coroinhas : 0;
 
-      let newAcolitos = []; // Clear current assignments for re-scheduling
-      let newCoroinhas = []; // Clear current assignments for re-scheduling
+      let newAcolitos: string[] = []; // Clear current assignments for re-scheduling
+      let newCoroinhas: string[] = []; // Clear current assignments for re-scheduling
 
       // Rule: Alternating Week (same time and location)
       const sevenDaysAgo = new Date(dateObj);
@@ -975,19 +977,25 @@ export default function App() {
           });
         }
 
+        const groupAcolitos = group.filter(p => p.type === 'acolito').length;
+        const groupCoroinhas = group.filter(p => p.type === 'coroinha').length;
+
         // Multi-role limit check
         const remAcolitos = acolitosTarget - newAcolitos.length;
         const remCoroinhas = coroinhasTarget - newCoroinhas.length;
 
         // If targets are set (not 0), we strictly respect them.
         // If the group would cause ANY role to exceed its target, we must reject the WHOLE group.
-        // Unless target is 0, which means "we don't want anyone here".
-        if (groupAcolitos > 0 && remAcolitos < groupAcolitos && acolitosTarget > 0) return false;
-        if (groupCoroinhas > 0 && remCoroinhas < groupCoroinhas && coroinhasTarget > 0) return false;
+        if (acolitosTarget > 0 && groupAcolitos > 0 && remAcolitos < groupAcolitos) return false;
+        if (coroinhasTarget > 0 && groupCoroinhas > 0 && remCoroinhas < groupCoroinhas) return false;
         
         // Special case: if one role is full but group has people for it, skip
-        if (groupAcolitos > 0 && remAcolitos <= 0 && acolitosTarget > 0) return false;
-        if (groupCoroinhas > 0 && remCoroinhas <= 0 && coroinhasTarget > 0) return false;
+        if (acolitosTarget > 0 && groupAcolitos > 0 && remAcolitos <= 0) return false;
+        if (coroinhasTarget > 0 && groupCoroinhas > 0 && remCoroinhas <= 0) return false;
+
+        // If the target for a role were actually 0, we should not add anyone of that type
+        if (acolitosTarget === 0 && groupAcolitos > 0) return false;
+        if (coroinhasTarget === 0 && groupCoroinhas > 0) return false;
 
         group.forEach(p => {
           if (p.type === 'acolito') {
@@ -1079,11 +1087,13 @@ export default function App() {
         if (error) throw error;
       } catch (err) {
         console.error("Error smart-scheduling mass", mass.id, err);
+        setIsGenerating(false);
         alert("Erro ao salvar escala automatica. Verifique sua conexão.");
         return;
       }
     }
     fetchData();
+    setIsGenerating(false);
     alert("Escala montada com sucesso!");
   };
 
@@ -1383,6 +1393,8 @@ export default function App() {
                 addNotice={addNotice}
                 updateNotice={updateNotice}
                 removeNotice={removeNotice}
+                isGenerating={isGenerating}
+                setIsGenerating={setIsGenerating}
               />
             )}
           </motion.div>
@@ -3111,7 +3123,7 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
   );
 }
 
-function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin, notices, addNotice, updateNotice, removeNotice }: any) {
+function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin, notices, addNotice, updateNotice, removeNotice, isGenerating, setIsGenerating }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(null);
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [isAutoModalOpen, setIsAutoModalOpen] = useState(false);
@@ -3124,6 +3136,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
   const [noticeEndDate, setNoticeEndDate] = useState('');
   const [showNoticeManager, setShowNoticeManager] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isScheduling, setIsScheduling] = useState(false);
 
   const publicUrl = `${window.location.origin}${window.location.pathname}?view=public`;
 
@@ -3980,6 +3993,32 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {isGenerating && (
+
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-md"
+          >
+            <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center gap-6 max-w-xs w-full text-center">
+              <div className="relative">
+                 <div className="w-16 h-16 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin" />
+                 <Layers className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-600 animate-pulse" size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">Montando Escala...</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 leading-relaxed">
+                  Por favor, aguarde enquanto o sistema distribui os servidores de forma inteligente.
+                </p>
+              </div>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
