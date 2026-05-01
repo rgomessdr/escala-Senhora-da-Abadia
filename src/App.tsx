@@ -3158,8 +3158,6 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
             ))
           )}
         </div>
-
-        <Footer />
       </div>
     </div>
   );
@@ -3298,6 +3296,8 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
       setSelectedMassesForAuto(new Set(masses.map((m: any) => m.id)));
     }
   };
+
+  const selectedMass = useMemo(() => masses.find((m: any) => m.id === selectedMassId), [masses, selectedMassId]);
 
   const selectedMassAssignments = useMemo(() => {
     if (!selectedMass) return { acolitos: [], coroinhas: [] };
