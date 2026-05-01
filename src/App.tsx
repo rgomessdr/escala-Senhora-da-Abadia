@@ -2305,6 +2305,10 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const sortedServers = useMemo(() => {
+    return [...servers].sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [servers]);
+
   const toggleSibling = (id: string) => {
     setSiblings(prev => 
       prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
@@ -2413,7 +2417,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Vínculo de Irmãos</label>
                   <p className="text-[9px] text-slate-400 font-bold mb-2">Marcados devem servir na mesma escala</p>
                   <div className="max-h-40 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
-                    {servers.filter((s: any) => s.id !== editingId).map((s: any) => (
+                    {sortedServers.filter((s: any) => s.id !== editingId).map((s: any) => (
                       <button
                         key={s.id}
                         type="button"
@@ -2461,7 +2465,7 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {servers.map((s: any) => (
+              {sortedServers.map((s: any) => (
                 <motion.div layout key={s.id} className="glass-card glass-card-hover p-5 flex items-center justify-between group">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-lg ${s.type === 'acolito' ? 'bg-indigo-600' : 'bg-blue-600'}`}>
@@ -3107,15 +3111,22 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
                        <span className="w-2 h-2 bg-blue-600 rounded-full" /> Coroinhas
                     </h4>
                     <div className="space-y-2">
-                      {m.assignments.coroinhas.filter(id => servers.some(sv => sv.id === id)).length > 0 ? m.assignments.coroinhas.filter(id => servers.some(sv => sv.id === id)).map(id => {
-                        const s = servers.find(sv => sv.id === id);
-                        return (
-                          <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
-                            <div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 text-[10px]">{s?.name?.[0]}</div>
-                            {s?.name}
-                          </div>
-                        );
-                      }) : <p className="text-[10px] text-slate-400 italic font-bold uppercase">Nenhum coroinha escalado</p>}
+                       {m.assignments.coroinhas
+                         .filter(id => servers.some(sv => sv.id === id))
+                         .sort((a, b) => {
+                           const sa = servers.find(sv => sv.id === a);
+                           const sb = servers.find(sv => sv.id === b);
+                           return (sa?.name || '').localeCompare(sb?.name || '');
+                         })
+                         .map(id => {
+                           const s = servers.find(sv => sv.id === id);
+                           return (
+                             <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
+                               <div className="w-6 h-6 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 text-[10px]">{s?.name?.[0]}</div>
+                               {s?.name}
+                             </div>
+                           );
+                         })}
                     </div>
                   </div>
 
@@ -3124,15 +3135,22 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
                        <span className="w-2 h-2 bg-indigo-600 rounded-full" /> Acólitos
                     </h4>
                     <div className="space-y-2">
-                      {m.assignments.acolitos.filter(id => servers.some(sv => sv.id === id)).length > 0 ? m.assignments.acolitos.filter(id => servers.some(sv => sv.id === id)).map(id => {
-                        const s = servers.find(sv => sv.id === id);
-                        return (
-                          <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
-                            <div className="w-6 h-6 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 text-[10px]">{s?.name?.[0]}</div>
-                            {s?.name}
-                          </div>
-                        );
-                      }) : <p className="text-[10px] text-slate-400 italic font-bold uppercase">Nenhum acólito escalado</p>}
+                       {m.assignments.acolitos
+                         .filter(id => servers.some(sv => sv.id === id))
+                         .sort((a, b) => {
+                           const sa = servers.find(sv => sv.id === a);
+                           const sb = servers.find(sv => sv.id === b);
+                           return (sa?.name || '').localeCompare(sb?.name || '');
+                         })
+                         .map(id => {
+                           const s = servers.find(sv => sv.id === id);
+                           return (
+                             <div key={id} className="p-3 bg-white border border-slate-100 rounded-xl font-bold text-sm text-slate-700 flex items-center gap-3">
+                               <div className="w-6 h-6 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 text-[10px]">{s?.name?.[0]}</div>
+                               {s?.name}
+                             </div>
+                           );
+                         })}
                     </div>
                   </div>
                 </div>
@@ -3281,12 +3299,16 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
     }
   };
 
-  const selectedMass = masses.find((m: any) => m.id === selectedMassId);
   const selectedMassAssignments = useMemo(() => {
     if (!selectedMass) return { acolitos: [], coroinhas: [] };
+    const getNames = (ids: string[]) => 
+      ids.map((id: string) => servers.find((s: any) => s.id === id)?.name)
+        .filter(Boolean)
+        .sort((a: string, b: string) => a.localeCompare(b));
+
     return {
-      acolitos: selectedMass.assignments.acolitos.map((id: string) => servers.find((s: any) => s.id === id)?.name).filter(Boolean),
-      coroinhas: selectedMass.assignments.coroinhas.map((id: string) => servers.find((s: any) => s.id === id)?.name).filter(Boolean)
+      acolitos: getNames(selectedMass.assignments.acolitos),
+      coroinhas: getNames(selectedMass.assignments.coroinhas)
     };
   }, [selectedMass, servers]);
 
@@ -3653,7 +3675,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                       )}
                       
                       <div className="space-y-2">
-                        {servers.sort((a:any, b:any) => (stats[a.id] || 0) - (stats[b.id] || 0)).map((s: any) => {
+                        {[...servers].sort((a: any, b: any) => a.name.localeCompare(b.name)).map((s: any) => {
                           const count = stats[s.id] || 0;
                           const isAssigned = selectedMass.assignments.acolitos.includes(s.id) || selectedMass.assignments.coroinhas.includes(s.id);
                           
@@ -3759,6 +3781,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                                                  <optgroup label="Disponíveis">
                                                    {servers
                                                      .filter((sv:any) => sv.type === 'acolito' && !selectedMass.assignments.acolitos.includes(sv.id))
+                                                     .sort((a, b) => a.name.localeCompare(b.name))
                                                      .map((sv:any) => (
                                                        <option key={sv.id} value={sv.id}>{sv.name}</option>
                                                      ))
@@ -3816,6 +3839,7 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                                                  <optgroup label="Disponíveis">
                                                    {servers
                                                      .filter((sv:any) => sv.type === 'coroinha' && !selectedMass.assignments.coroinhas.includes(sv.id))
+                                                     .sort((a, b) => a.name.localeCompare(b.name))
                                                      .map((sv:any) => (
                                                        <option key={sv.id} value={sv.id}>{sv.name}</option>
                                                      ))
