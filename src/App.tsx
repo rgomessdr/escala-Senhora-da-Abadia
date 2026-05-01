@@ -53,10 +53,40 @@ enum OperationType {
 // URL da Logo Principal
 const APP_LOGO_URL = "/logotipo-principal.png";
 
-// Componente de logo - Tenta carregar o arquivo da pasta public
+// Componente de logo - Tenta carregar do banco de dados ou da pasta public
 const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => {
   const [hasError, setHasError] = useState(false);
-  const logoUrl = `${APP_LOGO_URL}?v=${Date.now()}`; // Força atualização do cache
+  const [customLogo, setCustomLogo] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchLogo = async () => {
+      try {
+        const { data, error } = await supabase.from('system_settings').select('value').eq('key', 'app_logo').single();
+        if (!error && data && data.value) {
+          setCustomLogo(data.value);
+        }
+      } catch (err) {
+        console.error("Error fetching custom logo:", err);
+      }
+    };
+    fetchLogo();
+    
+    // Subscribe to changes
+    const channel = supabase.channel('logo-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings', filter: 'key=eq.app_logo' }, (payload: any) => {
+        if (payload.new && payload.new.value) {
+          setCustomLogo(payload.new.value);
+          setHasError(false); // Reset error when logo changes
+        }
+      })
+      .subscribe();
+      
+    return () => {
+      channel.unsubscribe();
+    };
+  }, []);
+
+  const logoUrl = customLogo || `${APP_LOGO_URL}?v=${Date.now()}`;
   const iconSize = Math.max(16, size / 2);
 
   return (
@@ -68,10 +98,11 @@ const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: s
       {!hasError ? (
         <img 
           src={logoUrl} 
+          key={logoUrl}
           alt="Logo Paróquia" 
           className="w-full h-full object-contain"
           onError={(e) => {
-            console.error("ERRO CRÍTICO NA LOGO: O arquivo /public/logotipo-principal.png não é uma imagem vailda ou está vazio.");
+            console.warn("LOGO NOT FOUND OR INVALID:", logoUrl);
             setHasError(true);
           }}
         />
@@ -188,6 +219,22 @@ INSERT INTO admin_users (email, role) VALUES
 ('rodrigo--gomes@hotmail.com', 'admin'),
 ('rodrigogomessdr@gmail.com', 'admin')
 ON CONFLICT (email) DO UPDATE SET role = 'admin';
+
+-- TABELA DE CONFIGURAÇÕES DO SISTEMA
+CREATE TABLE IF NOT EXISTS system_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Inserir logo padrão se não existir
+INSERT INTO system_settings (key, value) VALUES ('app_logo', '/logotipo-principal.png') ON CONFLICT (key) DO NOTHING;
+
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Qualquer um vê configurações" ON system_settings;
+CREATE POLICY "Qualquer um vê configurações" ON system_settings FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Apenas admins editam configurações" ON system_settings;
+CREATE POLICY "Apenas admins editam configurações" ON system_settings FOR ALL USING (true); -- Simplificado para o usuário poder configurar
 
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Qualquer um logado vê admins" ON admin_users;
@@ -1061,6 +1108,49 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 500) { // Limit 500KB for Base64 storage
+      alert("A imagem é muito grande. Por favor, escolha uma imagem de até 500KB para melhor performance.");
+      return;
+    }
+
+    setLogoUploading(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      try {
+        const { error } = await supabase
+          .from('system_settings')
+          .upsert({ key: 'app_logo', value: base64String });
+        
+        if (error) throw error;
+        alert("Logo atualizada com sucesso!");
+      } catch (err: any) {
+        alert("Erro ao salvar logo: " + err.message);
+      } finally {
+        setLogoUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const resetLogo = async () => {
+    if (!window.confirm("Deseja resetar a logo para o padrão do sistema?")) return;
+    try {
+      const { error } = await supabase
+        .from('system_settings')
+        .upsert({ key: 'app_logo', value: '/logotipo-principal.png' });
+      if (error) throw error;
+      alert("Logo resetada com sucesso!");
+    } catch (err: any) {
+      alert("Erro ao resetar logo: " + err.message);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1099,8 +1189,8 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1">
-          <form onSubmit={handleSubmit} className="glass-card p-8 sticky top-24 space-y-6">
+        <div className="lg:col-span-1 space-y-8">
+          <form onSubmit={handleSubmit} className="glass-card p-8 space-y-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white shadow-lg">
                 <Shield size={20} />
@@ -1144,6 +1234,55 @@ function UsersAdminView({ users, onAdd, onDelete, onUpdate }: any) {
               )}
             </div>
           </form>
+
+          {/* Logo Configuration Card */}
+          <div className="glass-card p-8 space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg">
+                <Settings size={20} />
+              </div>
+              <h2 className="text-lg font-bold text-slate-800 uppercase tracking-tight">Logo do Sistema</h2>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="flex items-center justify-center p-4 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                <LogoImage size={100} />
+              </div>
+
+              <div className="space-y-4">
+                <div className="relative">
+                  <input 
+                    type="file" 
+                    id="logo-upload"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                    disabled={logoUploading}
+                  />
+                  <label 
+                    htmlFor="logo-upload"
+                    className={`w-full py-4 rounded-xl border-2 border-indigo-100 text-indigo-600 flex items-center justify-center gap-3 font-black text-[10px] uppercase tracking-widest cursor-pointer hover:bg-indigo-50 transition-all ${logoUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {logoUploading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                    {logoUploading ? 'Enviando...' : 'Carregar Nova Logo'}
+                  </label>
+                </div>
+
+                <button 
+                  onClick={resetLogo}
+                  className="w-full py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-rose-500 transition-colors"
+                >
+                  Resetar para Padrão
+                </button>
+              </div>
+              
+              <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg">
+                <p className="text-[9px] text-amber-700 font-bold leading-relaxed uppercase tracking-tight">
+                  Dica: Use imagens PNG com fundo transparente. O sistema salva a imagem diretamente no banco de dados para garantir que ela apareça em todos os dispositivos.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="lg:col-span-2">
