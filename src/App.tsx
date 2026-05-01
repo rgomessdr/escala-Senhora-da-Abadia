@@ -2740,28 +2740,38 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
           <motion.div 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-indigo-600 rounded-3xl p-8 shadow-2xl relative overflow-hidden text-white border-4 border-indigo-500"
+            className="bg-white rounded-3xl p-1 shadow-xl relative overflow-hidden border border-indigo-100"
           >
-            <div className="absolute right-0 top-0 w-48 h-48 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-            
-            <div className="relative z-10 space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-md">
-                  <Megaphone size={20} className="text-white" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black uppercase tracking-widest leading-none">Comunicados Importantes</h3>
-                  <p className="text-[9px] font-bold text-indigo-200 uppercase tracking-tighter mt-1">Coordenação de Altar</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {notices.map((n, i) => (
-                  <div key={n.id} className="flex gap-4 p-4 bg-white/10 rounded-2xl border border-white/10">
-                    <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-[10px] font-black shrink-0 border border-white/20">{i + 1}</div>
-                    <p className="text-sm sm:text-base font-bold leading-relaxed">{n.content}</p>
+            <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+              
+              <div className="relative z-10 space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md border border-white/20">
+                    <Megaphone size={24} className="text-indigo-100" />
                   </div>
-                ))}
+                  <div>
+                    <h3 className="text-lg font-black uppercase tracking-widest leading-none">Mural de Avisos</h3>
+                    <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1 opacity-80">Informações Importantes da Paróquia</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {notices.map((n, i) => (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.1 }}
+                      key={n.id} 
+                      className="flex gap-4 p-5 bg-white/10 rounded-2xl border border-white/10 backdrop-blur-sm"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black shrink-0 border border-white/10 text-white">
+                        {i + 1}
+                      </div>
+                      <p className="text-sm font-bold leading-relaxed text-indigo-50">{n.content}</p>
+                    </motion.div>
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>
@@ -3030,13 +3040,16 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
   };
 
   const handlePublish = () => {
+    if (!window.confirm("Deseja publicar as alterações atuais? Isso atualizará a página pública para todos.")) return;
+    
     setIsNotifying(true);
-    // Simulating a publish action that ensures everything is synced
-    // Since it's realtime, it's already sync, but we provide feedback
+    // Realtime ensures sync, but we provide a psychological 'sync' point
     setTimeout(() => {
       setIsNotifying(false);
       setShowPublicPanel(true);
-    }, 800);
+      // Auto-hide public panel after 10 seconds
+      setTimeout(() => setShowPublicPanel(false), 10000);
+    }, 1500);
   };
 
   const handleAddNotice = (e: React.FormEvent) => {
@@ -3377,9 +3390,32 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                                               <p className="text-sm font-bold text-slate-900 truncate">{s?.name}</p>
                                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Acólito Escalado</p>
                                            </div>
-                                           <button onClick={() => onToggle(selectedMass.id, id, 'acolito')} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
-                                              <X size={18} />
-                                           </button>
+                                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <select 
+                                                onChange={(e) => {
+                                                  if (e.target.value === 'remove') onToggle(selectedMass.id, id, 'acolito');
+                                                  else if (e.target.value !== id) {
+                                                    onToggle(selectedMass.id, id, 'acolito');
+                                                    onToggle(selectedMass.id, e.target.value, 'acolito');
+                                                 }
+                                                }}
+                                                className="py-1 px-2 bg-white border border-indigo-100 rounded-lg text-[9px] font-black uppercase outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                                              >
+                                                 <option value={id}>Trocar</option>
+                                                 <option value="remove">Remover</option>
+                                                 <optgroup label="Disponíveis">
+                                                   {servers
+                                                     .filter((sv:any) => sv.type === 'acolito' && !selectedMass.assignments.acolitos.includes(sv.id))
+                                                     .map((sv:any) => (
+                                                       <option key={sv.id} value={sv.id}>{sv.name}</option>
+                                                     ))
+                                                   }
+                                                 </optgroup>
+                                              </select>
+                                              <button onClick={() => onToggle(selectedMass.id, id, 'acolito')} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
+                                                 <X size={16} />
+                                              </button>
+                                           </div>
                                         </motion.div>
                                       );
                                     })
@@ -3411,9 +3447,32 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
                                               <p className="text-sm font-bold text-slate-900 truncate">{s?.name}</p>
                                               <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Coroinha Escalado</p>
                                            </div>
-                                           <button onClick={() => onToggle(selectedMass.id, id, 'coroinha')} className="p-2 text-slate-200 hover:text-rose-500 transition-colors">
-                                              <X size={18} />
-                                           </button>
+                                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                              <select 
+                                                onChange={(e) => {
+                                                  if (e.target.value === 'remove') onToggle(selectedMass.id, id, 'coroinha');
+                                                  else if (e.target.value !== id) {
+                                                    onToggle(selectedMass.id, id, 'coroinha');
+                                                    onToggle(selectedMass.id, e.target.value, 'coroinha');
+                                                 }
+                                                }}
+                                                className="py-1 px-2 bg-white border border-indigo-100 rounded-lg text-[9px] font-black uppercase outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                                              >
+                                                 <option value={id}>Trocar</option>
+                                                 <option value="remove">Remover</option>
+                                                 <optgroup label="Disponíveis">
+                                                   {servers
+                                                     .filter((sv:any) => sv.type === 'coroinha' && !selectedMass.assignments.coroinhas.includes(sv.id))
+                                                     .map((sv:any) => (
+                                                       <option key={sv.id} value={sv.id}>{sv.name}</option>
+                                                     ))
+                                                   }
+                                                 </optgroup>
+                                              </select>
+                                              <button onClick={() => onToggle(selectedMass.id, id, 'coroinha')} className="p-2 text-slate-300 hover:text-rose-500 transition-colors">
+                                                 <X size={16} />
+                                              </button>
+                                           </div>
                                         </motion.div>
                                       );
                                     })
