@@ -1402,8 +1402,6 @@ export default function App() {
         </AnimatePresence>
       </main>
       
-      <Footer />
-
       {/* Loading Overlay */}
       <AnimatePresence>
         {isGenerating && (
@@ -3142,93 +3140,32 @@ function PublicView({ masses, servers, notices }: { masses: Mass[], servers: Ser
           )}
         </div>
 
-        <footer className="pt-8 pb-12 border-t border-slate-200 text-center space-y-2">
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Paróquia Nossa Senhora da Abadia</p>
-          <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
+        <footer className="pt-8 pb-12 border-t border-slate-200 text-center space-y-4">
+          <div className="flex flex-col md:flex-row items-center justify-center gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <span className="flex items-center gap-1.5 underline decoration-2 underline-offset-4 decoration-amber-400">
+              CNPJ: 42.624.930/0001-66
+            </span>
+            <span className="hidden md:inline opacity-30">•</span>
+            <a 
+              href="https://wa.me/5567999536832" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 hover:text-indigo-600 transition-colors"
+            >
+              <MessageCircle size={12} /> Dúvidas e Ajuda: (67) 99953-6832
+            </a>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Paróquia Nossa Senhora da Abadia</p>
+            <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">Desenvolvedor SmartInfo Tecnologia e Softwares</p>
+          </div>
         </footer>
       </div>
     </div>
   );
 }
 
-function Footer() {
-  return (
-    <footer className="bg-[#fcf9f2] border-t border-[#eee5d3] pt-16 pb-8 mt-auto">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8 border-b border-[#eee5d3] pb-16">
-          {/* Logo & Description */}
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-black tracking-tighter text-[#1b4332] uppercase">
-                Abadia<span className="text-[#b8860b]">Sidro</span>
-              </span>
-            </div>
-            <p className="text-[11px] font-bold text-[#4a3728] leading-relaxed opacity-80 uppercase tracking-tight">
-              O portal oficial das escalas de Acólitos e Coroinhas da Paróquia Nossa Senhora da Abadia. 
-              Servindo à comunidade de Sidrolândia com fidelidade e zelo litúrgico.
-            </p>
-            <div className="flex gap-4">
-              <a href="#" className="text-[10px] font-black text-[#4a3728] uppercase tracking-widest hover:text-[#b8860b] transition-colors underline decoration-2 underline-offset-4">Instagram</a>
-              <a href="#" className="text-[10px] font-black text-[#4a3728] uppercase tracking-widest hover:text-[#b8860b] transition-colors underline decoration-2 underline-offset-4">Facebook</a>
-            </div>
-          </div>
 
-          {/* Navegação */}
-          <div className="space-y-6 md:pl-8">
-            <h4 className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] opacity-40">Navegação</h4>
-            <ul className="space-y-3">
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Início</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Membros</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Escalas</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Avisos</a></li>
-            </ul>
-          </div>
-
-          {/* Atendimento */}
-          <div className="space-y-6">
-            <h4 className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] opacity-40">Atendimento</h4>
-            <ul className="space-y-4">
-              <li className="flex items-center gap-3">
-                <Phone size={14} className="text-[#1b4332]" />
-                <span className="text-[10px] font-bold text-[#4a3728] tracking-widest leading-none">67 3272-1320</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <MessageCircle size={14} className="text-[#1b4332]" />
-                <span className="text-[10px] font-bold text-[#4a3728] tracking-widest leading-none">Falar no WhatsApp</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <Mail size={14} className="text-[#1b4332]" />
-                <span className="text-[10px] font-bold text-[#4a3728] tracking-widest leading-none">contato@abadiasidro.com.br</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Institucional */}
-          <div className="space-y-6">
-            <h4 className="text-[10px] font-black text-[#4a3728] uppercase tracking-[0.2em] opacity-40">Institucional</h4>
-            <ul className="space-y-3">
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Termos de Uso</a></li>
-              <li><a href="#" className="text-[10px] font-bold text-[#4a3728] hover:text-[#b8860b] transition-colors uppercase tracking-widest">Política de Privacidade</a></li>
-            </ul>
-            <div className="pt-2 text-[9px] font-black text-[#4a3728] opacity-30 uppercase tracking-[0.1em] leading-relaxed">
-              CNPJ: 03.262.536/0014-99<br />
-              Rua São Bento, 45 - Centro<br />
-              Sidrolândia - MS
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Bar */}
-        <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[9px] font-black text-[#4a3728] uppercase tracking-[0.15em] opacity-30">
-          <div>© 2026 Abadia Sidro. Todos os direitos reservados.</div>
-          <div className="flex items-center gap-1">
-            Desenvolvido por <span className="text-[#1b4332]">SmartSystem</span>
-          </div>
-        </div>
-      </div>
-    </footer>
-  );
-}
 
 function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSchedule, isAdmin, notices, addNotice, updateNotice, removeNotice, isGenerating, setIsGenerating }: any) {
   const [selectedMassId, setSelectedMassId] = useState<string | null>(null);
