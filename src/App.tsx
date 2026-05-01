@@ -975,24 +975,19 @@ export default function App() {
           });
         }
 
-        // Count how many of each type in this group
-        const groupAcolitos = group.filter(p => p.type === 'acolito').length;
-        const groupCoroinhas = group.filter(p => p.type === 'coroinha').length;
-
-        // Respect targets: If adding this group exceeds the remaining slots or target is reached, skip
-        // BUT if target is 0, we treat it as 0 (don't add anything).
-        // If targets are set (e.g. 1 and 2), we only add if they FIT in the remaining space.
+        // Multi-role limit check
         const remAcolitos = acolitosTarget - newAcolitos.length;
         const remCoroinhas = coroinhasTarget - newCoroinhas.length;
 
-        // If the group has people for a role that is already full, we can't add the GROUP
-        // because siblings MUST serve together.
+        // If targets are set (not 0), we strictly respect them.
+        // If the group would cause ANY role to exceed its target, we must reject the WHOLE group.
+        // Unless target is 0, which means "we don't want anyone here".
+        if (groupAcolitos > 0 && remAcolitos < groupAcolitos && acolitosTarget > 0) return false;
+        if (groupCoroinhas > 0 && remCoroinhas < groupCoroinhas && coroinhasTarget > 0) return false;
+        
+        // Special case: if one role is full but group has people for it, skip
         if (groupAcolitos > 0 && remAcolitos <= 0 && acolitosTarget > 0) return false;
         if (groupCoroinhas > 0 && remCoroinhas <= 0 && coroinhasTarget > 0) return false;
-        
-        // If the group is larger than the total remaining slots, skip to stay within limits
-        if (groupAcolitos > remAcolitos && remAcolitos > 0) return false;
-        if (groupCoroinhas > remCoroinhas && remCoroinhas > 0) return false;
 
         group.forEach(p => {
           if (p.type === 'acolito') {
@@ -3141,19 +3136,30 @@ function ScheduleView({ masses, servers, onToggle, stats, autoSchedule, clearSch
 
   const filteredMasses = useMemo(() => {
     let result = masses;
-    if (locationFilter !== 'all') {
-      result = result.filter((m: any) => m.location === locationFilter);
-    }
-    
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
+    const term = searchTerm.trim().toLowerCase();
+
+    if (term) {
       result = result.filter((m: any) => {
         const locationMatch = m.location.toLowerCase().includes(term);
         const titleMatch = m.title.toLowerCase().includes(term);
         const acolitosMatch = m.assignments.acolitos.some((id: string) => servers.find((sv: any) => sv.id === id)?.name.toLowerCase().includes(term));
         const coroinhasMatch = m.assignments.coroinhas.some((id: string) => servers.find((sv: any) => sv.id === id)?.name.toLowerCase().includes(term));
-        return locationMatch || titleMatch || acolitosMatch || coroinhasMatch;
+        const memberMatch = acolitosMatch || coroinhasMatch;
+        
+        // If member name matches, we show it globally regardless of location filter
+        if (memberMatch) return true;
+        
+        // Otherwise search within the current location filter if active
+        const matchesLocation = locationFilter === 'all' || m.location === locationFilter;
+        return (locationMatch || titleMatch) && matchesLocation;
       });
+    } else {
+      if (locationFilter !== 'all') {
+        result = result.filter((m: any) => m.location === locationFilter);
+      }
+      
+      // If we are in monthly view, we might want to filter by the current month
+      // For now we show all so the admin can see the full schedule
     }
     
     return result;
