@@ -50,27 +50,29 @@ enum OperationType {
   WRITE = 'write',
 }
 
+// URL da Logo (Altere aqui para um link externo ou mantenha /logotipo-principal.png para o arquivo na pasta public)
+const APP_LOGO_URL = "/logotipo-principal.png";
+
 // Componente de logo com fallback automático
 const LogoImage = ({ size = 40, className = "" }: { size?: number, className?: string }) => {
   const [hasError, setHasError] = useState(false);
-  const logoUrl = "/main-logo.png";
   const iconSize = Math.max(16, size / 2);
 
   return (
     <div 
-      className={`flex items-center justify-center overflow-hidden shrink-0 transition-opacity duration-300 ${className}`} 
+      className={`flex items-center justify-center overflow-hidden shrink-0 ${className}`} 
       style={{ width: size, height: size }}
     >
       {!hasError ? (
         <img 
-          src={logoUrl} 
-          alt="Logo" 
+          src={APP_LOGO_URL} 
+          alt="Logo Paróquia" 
           className="w-full h-full object-contain"
           onError={() => setHasError(true)}
           onLoad={() => setHasError(false)}
         />
       ) : (
-        <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg border border-indigo-500/50">
+        <div className="w-full h-full bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md border border-white/20">
           <Church size={iconSize} />
         </div>
       )}
