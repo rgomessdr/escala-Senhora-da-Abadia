@@ -8,6 +8,7 @@ export interface Server {
   email?: string;
   whatsapp?: string;
   birthDate?: string;
+  siblings?: string[]; // Array of UUIDs of other servers
   ownerId: string;
 }
 

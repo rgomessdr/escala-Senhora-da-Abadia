@@ -492,6 +492,7 @@ export default function App() {
         email: s.email,
         whatsapp: s.whatsapp,
         birthDate: s.birth_date,
+        siblings: s.siblings || [],
         familyId: s.family_id,
         ownerId: s.owner_id
       })));
@@ -876,6 +877,14 @@ export default function App() {
         // Rule: No same person in same mass
         if (currentAcolitos.includes(server.id) || currentCoroinhas.includes(server.id)) return { allowed: false };
         
+        // Rule: No siblings in same mass
+        if (server.siblings && server.siblings.length > 0) {
+          const siblingIsAssigned = server.siblings.some(sid => 
+            currentAcolitos.includes(sid) || currentCoroinhas.includes(sid)
+          );
+          if (siblingIsAssigned) return { allowed: false };
+        }
+
         // Rule: No same person on the same day
         if (peopleAssignedOnDate[mass.date].has(server.id)) return { allowed: false };
 
@@ -2116,8 +2125,10 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
   const [email, setEmail] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [siblings, setSiblings] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -2161,16 +2172,17 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
 
     try {
       if (editingId) {
-        await onUpdate(editingId, { name, type, email, whatsapp, birthDate });
+        await onUpdate(editingId, { name, type, email, whatsapp, birthDate, siblings });
         setEditingId(null);
       } else {
-        await onAdd({ name, type, email, whatsapp, birthDate });
+        await onAdd({ name, type, email, whatsapp, birthDate, siblings });
       }
 
       setName('');
       setEmail('');
       setWhatsapp('');
       setBirthDate('');
+      setSiblings([]);
       setType('coroinha');
     } catch (err) {
       // Error handled by onAdd/onUpdate
@@ -2184,8 +2196,16 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
     setEmail(s.email || '');
     setWhatsapp(s.whatsapp || '');
     setBirthDate(s.birthDate || '');
+    setSiblings(s.siblings || []);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const toggleSibling = (id: string) => {
+    setSiblings(prev => 
+      prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
+    );
+  };
+
 
   return (
     <div className="space-y-8">
@@ -2284,6 +2304,31 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                   </div>
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Vínculo de Irmãos</label>
+                  <p className="text-[9px] text-slate-400 font-bold mb-2">Marcados não caem na mesma escala</p>
+                  <div className="max-h-40 overflow-y-auto space-y-1 pr-2 custom-scrollbar">
+                    {servers.filter((s: any) => s.id !== editingId).map((s: any) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => toggleSibling(s.id)}
+                        className={`w-full text-left p-2 rounded-lg text-[10px] font-black uppercase transition-all flex items-center justify-between border ${
+                          siblings.includes(s.id) 
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                            : 'bg-white border-slate-100 text-slate-500 hover:border-slate-300'
+                        }`}
+                      >
+                        {s.name}
+                        {siblings.includes(s.id) && <CheckCircle2 size={12} />}
+                      </button>
+                    ))}
+                    {servers.length <= 1 && (
+                      <p className="text-[10px] text-slate-400 italic text-center py-4">Nenhum outro membro cadastrado</p>
+                    )}
+                  </div>
+                </div>
+
                 <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-xl active:scale-95 flex items-center justify-center gap-3">
                   <Plus size={18} /> {editingId ? 'Atualizar Membro' : 'Salvar Membro'}
                 </button>
@@ -2330,6 +2375,28 @@ function MembersView({ servers, onAdd, onUpdate, onDelete, stats, isAdmin }: any
                           {s.whatsapp && <span className="flex items-center gap-1 opacity-70"><Phone size={10} /> {s.whatsapp}</span>}
                           {s.email && <span className="flex items-center gap-1 opacity-70"><Mail size={10} /> {s.email}</span>}
                           {s.birthDate && <span className="flex items-center gap-1 opacity-70 text-[9px] font-bold">Nasc: {new Date(s.birthDate).toLocaleDateString('pt-BR')}</span>}
+                        </div>
+                      )}
+                      {s.siblings && s.siblings.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                           <div className="px-1.5 py-0.5 bg-slate-50 border border-slate-100 rounded text-[8px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1">
+                             <Users size={8} /> {s.siblings.length} Vínculo(s)
+                           </div>
+                           <div className="flex -space-x-1 overflow-hidden">
+                             {s.siblings.slice(0, 3).map((sid: string) => {
+                               const sibling = servers.find((serv: any) => serv.id === sid);
+                               return (
+                                 <div key={sid} className="inline-block h-4 w-4 rounded-full ring-1 ring-white bg-indigo-50 flex items-center justify-center text-[7px] font-black text-indigo-600 uppercase" title={sibling?.name}>
+                                   {sibling?.name?.[0] || '?'}
+                                 </div>
+                               );
+                             })}
+                             {s.siblings.length > 3 && (
+                               <div className="inline-block h-4 w-4 rounded-full ring-2 ring-white bg-slate-100 flex items-center justify-center text-[7px] font-black text-slate-500 uppercase">
+                                 +{s.siblings.length - 3}
+                               </div>
+                             )}
+                           </div>
                         </div>
                       )}
                     </div>
